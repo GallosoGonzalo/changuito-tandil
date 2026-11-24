@@ -11,12 +11,10 @@ const tandilDate = new Intl.DateTimeFormat("sv-SE", {timeZone: "America/Argentin
 const today = () => tandilDate.format(new Date());
 purchaseDate.value = today();
 purchaseDate.min = today();
-postalInput.value = readSaved("changuito-postal", "7000");
 
 function savePlanning() {
   try {
     localStorage.setItem("changuito-benefits", JSON.stringify(benefits));
-    localStorage.setItem("changuito-postal", JSON.stringify(postalInput.value));
   } catch {
     // The current session still works without storage.
   }
@@ -188,10 +186,10 @@ function showPlans(plans, chosen, date) {
 }
 
 quoteButton.addEventListener("click", async () => {
-  const postalCode = postalInput.value.trim().toUpperCase();
+  const postalCode = "7000"; // CP interno de Tandil para la cotización de Carrefour.
   const date = purchaseDate.value;
-  if (!basket.size || !date || date < today() || !/^(?:\d{4}|[A-Z]\d{4}[A-Z]{3})$/.test(postalCode)) {
-    quoteStatus.textContent = "Agregá productos y revisá el código postal y el día.";
+  if (!basket.size || !date || date < today()) {
+    quoteStatus.textContent = "Agregá productos y revisá el día.";
     return;
   }
   savePlanning();
@@ -215,6 +213,6 @@ quoteButton.addEventListener("click", async () => {
   }
 });
 
-postalInput.addEventListener("input", resetQuote);
+postalInput.addEventListener("change", resetQuote);
 purchaseDate.addEventListener("change", resetQuote);
 showBenefits();
