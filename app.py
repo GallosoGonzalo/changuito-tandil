@@ -129,12 +129,29 @@ def search_store(store, query, cache_window):
     headers = {"User-Agent": "curl/8.5.0", "Accept": "*/*"}
     with urlopen(Request(url, headers=headers), timeout=8) as response:
         products = list(parse(json.load(response)))
+    if store == "Monarca":
+        seen = {product["id"] for product in products}
+        terms = monarca_search_terms(query)
+        for term in terms:
+            alternate_url = "https://api.monarcadigital.com.ar/products/search?" + urlencode({"page": 0, "size": 16, "query": term})
+            with urlopen(Request(alternate_url, headers=headers), timeout=8) as response:
+                for product in monarca_products(json.load(response)):
+                    if product["id"] not in seen:
+                        products.append(product)
+                        seen.add(product["id"])
     if store == "Carrefour" and not products:
         # Intelligent Search sometimes returns zero hits for broad terms such as "azucar".
         fallback = "https://www.carrefour.com.ar/api/catalog_system/pub/products/search?" + urlencode({"ft": query}, quote_via=quote)
         with urlopen(Request(fallback, headers=headers), timeout=8) as response:
             products = list(carrefour_products({"products": json.load(response)}))
     return products
+
+
+def monarca_search_terms(query):
+    normalized = query.casefold().replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+    if "papel" in normalized and any(word in normalized for word in ("higienico", "higienica", "rollo")):
+        return ["papel hoja", "papel higienico"] if "papel hoja" not in normalized else ["papel higienico"]
+    return []
 
 
 def delivery_options(logistics):
