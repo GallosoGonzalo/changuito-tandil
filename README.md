@@ -18,3 +18,6 @@ Requiere Python 3.10 o superior e internet. Si querés abrirlo desde el celular 
 - Podés elegir un día futuro para comparar beneficios con los precios y el envío de hoy. La app compara hasta cuatro repartos, incluyendo todo en un supermercado cuando hay oferta para todos los productos. El resultado es la mejor alternativa de las cotizadas.
 - La lista y tus beneficios se guardan en el navegador. Volvé a buscar para actualizar los precios de catálogo y cotizá antes de comprar. Confirmá la disponibilidad, el envío y las promociones en la app de cada supermercado.
 
+## Vercel
+
+Desde la carpeta del proyecto, ejecutá `npx vercel login` y después `npx vercel --prod`. También podés importar un repositorio que contenga estos archivos desde el panel de Vercel. La interfaz se sirve desde `public/` y las tiendas se consultan mediante las funciones `/api/search` y `/api/quote`. No requiere credenciales de los supermercados ni variables de entorno.

@@ -1,0 +1,8 @@
+{
+  "framework": null,
+  "outputDirectory": "public",
+  "functions": {
+    "api/search.py": { "maxDuration": 25 },
+    "api/quote.py": { "maxDuration": 25 }
+  }
+}

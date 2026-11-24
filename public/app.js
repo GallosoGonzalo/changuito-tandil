@@ -64,9 +64,9 @@ function priceFor(product, quantity, at = Date.now()) {
   return product.promos.reduce((best, promo) => {
     if (!Number.isInteger(promo.group) || promo.group < 1 || !Number.isInteger(promo.price)
         || promo.price < 0 || (promo.expires && at > promo.expires) || promo.card) return best;
-    const groups = Math.floor(quantity / promo.group);
-    const total = groups * promo.price + quantity % promo.group * product.price;
-    return groups && total < best.total ? {total, promo: promo.label} : best;
+    const groups = Math.floor(Math.min(quantity, promo.limit ?? quantity) / promo.group);
+    const total = groups * promo.price + (quantity - groups * promo.group) * product.price;
+    return groups && total < best.total ? {total, promo: promo.label + (promo.estimated ? " · estimado" : "")} : best;
   }, fullPrice);
 }
 
@@ -123,6 +123,10 @@ function renderResults() {
         if (estimated.total < offer.price) line.append(" · regular " + fmt(offer.price));
         const promos = [...new Set(offer.promos.map((promo) => promo.label).filter(Boolean))];
         if (promos.length) line.append(el("div", promos.join(" · "), "promo"));
+        const pair = priceFor(offer, 2);
+        if (offer.promos.some((promo) => promo.estimated && promo.group === 2) && pair.total < estimated.total * 2) {
+          line.append(el("div", "2 unidades por " + fmt(pair.total) + " · estimado", "promo"));
+        }
         prices.append(line);
       }
       details.append(prices);

@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import re
 import time
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import parse_qs, quote, urlencode, urlsplit
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
@@ -97,7 +97,19 @@ def carrefour_products(data):
                     and not conditions.get("minimumQuantity")
                     and discount == [{"name": "PercentualDiscount", "value": "15"}]
                 )
-                promos.append({"label": label, "price": (price * 85 + 50) // 100 if card else None, "group": 1, "card": card})
+                promo = {"label": label, "price": (price * 85 + 50) // 100 if card else None, "group": 1, "card": card}
+                pair = re.match(r"^PROMO-2do al (\d+)%\s+Max (\d+) unidades\b", label or "", re.IGNORECASE)
+                params = {param.get("name"): param.get("value") for param in conditions.get("parameters") or []}
+                effect = next((param.get("value") for param in discount if param.get("name") == "PercentualDiscount"), None)
+                if pair and conditions.get("minimumQuantity") == 2 and set(params) == {"SkuIdsList"}:
+                    percent, limit = map(int, pair.groups())
+                    if (
+                        0 < percent <= 100 and limit >= 2 and not teaser.get("generalValues")
+                        and str(item["itemId"]) in (params["SkuIdsList"] or "").split(",")
+                        and len(discount) == 1 and cents(effect) == percent * 50
+                    ):
+                        promo.update(group=2, limit=limit, price=(price * (200 - percent) + 50) // 100, estimated=True)
+                promos.append(promo)
             yield {
                 "store": "Carrefour", "id": str(item["itemId"]), "seller": offer["seller"], "price": price,
                 "ean": barcode(item.get("ean")), "name": product["productName"],
@@ -112,11 +124,17 @@ def search_store(store, query, cache_window):
         url = "https://api.monarcadigital.com.ar/products/search?" + urlencode({"page": 0, "size": 16, "query": query})
         parse = monarca_products
     else:
-        url = "https://www.carrefour.com.ar/api/io/_v/api/intelligent-search/product_search?" + urlencode({"count": 16, "query": query})
+        url = "https://www.carrefour.com.ar/api/io/_v/api/intelligent-search/product_search?" + urlencode({"count": 16, "query": query}, quote_via=quote)
         parse = carrefour_products
-    request = Request(url, headers={"User-Agent": "curl/8.5.0", "Accept": "*/*"})
-    with urlopen(request, timeout=14) as response:
-        return list(parse(json.load(response)))
+    headers = {"User-Agent": "curl/8.5.0", "Accept": "*/*"}
+    with urlopen(Request(url, headers=headers), timeout=8) as response:
+        products = list(parse(json.load(response)))
+    if store == "Carrefour" and not products:
+        # Intelligent Search sometimes returns zero hits for broad terms such as "azucar".
+        fallback = "https://www.carrefour.com.ar/api/catalog_system/pub/products/search?" + urlencode({"ft": query}, quote_via=quote)
+        with urlopen(Request(fallback, headers=headers), timeout=8) as response:
+            products = list(carrefour_products({"products": json.load(response)}))
+    return products
 
 
 def delivery_options(logistics):
