@@ -35,6 +35,16 @@ function el(tag, content, className) {
   return node;
 }
 
+function icon(id) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const use = document.createElementNS(svg.namespaceURI, "use");
+  svg.setAttribute("class", "icon");
+  svg.setAttribute("aria-hidden", "true");
+  use.setAttribute("href", "#i-" + id);
+  svg.append(use);
+  return svg;
+}
+
 function button(label, action, className) {
   const node = el("button", label, className);
   node.type = "button";
@@ -103,24 +113,28 @@ function renderResults() {
   results.replaceChildren();
   for (const {term, groups} of groupsByTerm) {
     results.append(el("h3", term, "term"));
-    if (!groups.length) results.append(el("p", "Sin resultados disponibles.", "muted"));
+    if (!groups.length) results.append(el("p", "Sin resultados disponibles. Probá con otro nombre o marca.", "no-results"));
     const ordered = [...groups].sort((a, b) => b[1].length - a[1].length
       || Math.min(...a[1].map((item) => priceFor(item, 1).total)) - Math.min(...b[1].map((item) => priceFor(item, 1).total)));
     for (const [key, offers] of ordered) {
       const product = offers[0];
       const row = el("article", undefined, "product");
-      const image = el("img");
-      image.alt = "";
-      image.loading = "lazy";
-      if (product.image?.startsWith("https://")) image.src = product.image;
-      const details = el("div");
-      details.append(el("h3", product.name));
+      const media = el("div", undefined, "product-media");
+      media.append(icon("package"));
+      if (product.image?.startsWith("https://")) {
+        const image = el("img");
+        image.alt = "";
+        image.loading = "lazy";
+        image.addEventListener("error", () => image.remove(), {once: true});
+        image.src = product.image;
+        media.append(image);
+      }
       const prices = el("div", undefined, "offers");
-      for (const offer of offers) {
+      for (const offer of [...offers].sort((a, b) => stores.indexOf(a.store) - stores.indexOf(b.store))) {
         const line = el("div", undefined, "offer");
         const estimated = priceFor(offer, 1);
-        line.append(el("strong", offer.store + " · " + fmt(estimated.total)));
-        if (estimated.total < offer.price) line.append(" · regular " + fmt(offer.price));
+        line.append(el("span", offer.store, "offer-store"), el("strong", fmt(estimated.total), "offer-price"));
+        if (estimated.total < offer.price) line.append(el("small", "Precio regular: " + fmt(offer.price)));
         const promos = [...new Set(offer.promos.map((promo) => promo.label).filter(Boolean))];
         if (promos.length) line.append(el("div", promos.join(" · "), "promo"));
         const pair = priceFor(offer, 2);
@@ -129,13 +143,16 @@ function renderResults() {
         }
         prices.append(line);
       }
-      details.append(prices);
+      let feedbackTimer;
       const add = button("Agregar", () => {
         changeQuantity(key, 1, offers);
         status.textContent = "Agregaste " + product.name + " a tu compra.";
-      });
+        add.textContent = "Agregado";
+        clearTimeout(feedbackTimer);
+        feedbackTimer = setTimeout(() => { add.textContent = "Agregar"; }, 1200);
+      }, "add");
       add.setAttribute("aria-label", "Agregar " + product.name);
-      row.append(image, details, add);
+      row.append(media, el("h4", product.name), prices, add);
       results.append(row);
     }
   }
@@ -151,6 +168,7 @@ function resetQuote() {
 
 function renderBasket() {
   const lists = find("#lists");
+  const focus = lists.contains(document.activeElement) ? document.activeElement.dataset : null;
   const byStore = new Map(stores.map((store) => [store, []]));
   let grandTotal = 0;
   for (const [key, item] of basket) {
@@ -161,14 +179,20 @@ function renderBasket() {
     }
   }
   find("#total").textContent = fmt(recommended?.net ?? grandTotal);
-  find("#basket-caption").textContent = recommended ? "Costo final estimado con envío y beneficios." : "Subtotal preliminar de productos, antes de cotizar.";
+  const units = [...basket.values()].reduce((sum, item) => sum + item.quantity, 0);
+  find("#nav-count").textContent = units;
+  find(".basket-link").setAttribute("aria-label", "Tu compra: " + units + (units === 1 ? " unidad" : " unidades"));
+  find("#basket-label").textContent = recommended ? "Costo final estimado" : "Subtotal de productos";
+  find("#basket-caption").textContent = recommended ? "Con envío y beneficios aplicables." :
+    basket.size ? "Antes de cotizar envío y beneficios." : "Agregá productos para cotizar tu lista.";
+  find("#quote").disabled = !basket.size || find("#quote").getAttribute("aria-busy") === "true";
   lists.replaceChildren();
   for (const [store, lines] of byStore) {
+    if (!lines.length) continue;
     const section = el("section", undefined, "store");
     const heading = el("div", undefined, "heading");
     heading.append(el("h3", store), el("strong", fmt(lines.reduce((sum, line) => sum + line.total, 0))));
     section.append(heading);
-    if (!lines.length) section.append(el("p", "Todavía sin productos.", "muted"));
     for (const line of lines) {
       const row = el("div", undefined, "line");
       const title = el("div", undefined, "heading");
@@ -184,34 +208,55 @@ function renderBasket() {
       minus.setAttribute("aria-label", "Quitar una unidad de " + line.product.name);
       const plus = button("+", () => changeQuantity(line.key, 1));
       plus.setAttribute("aria-label", "Sumar una unidad de " + line.product.name);
+      for (const [control, action] of [[minus, "minus"], [plus, "plus"]]) {
+        Object.assign(control.dataset, {key: line.key, store, action});
+      }
+      plus.disabled = basket.get(line.key).quantity >= 99;
       controls.append(minus, el("span", basket.get(line.key).quantity + " en total", "muted"), plus);
       row.append(controls);
       section.append(row);
     }
-    if (lines.length) {
-      const copy = button("Copiar lista", async () => {
-        try {
-          await navigator.clipboard.writeText(lines.map((line) => line.quantity + " × " + line.product.name).join("\n"));
-          copy.textContent = "Lista copiada";
-        } catch {
-          copy.textContent = "No se pudo copiar";
-        }
-      }, "copy");
-      section.append(copy);
-    }
+    const copy = button("Copiar lista", async () => {
+      try {
+        await navigator.clipboard.writeText(lines.map((line) => line.quantity + " × " + line.product.name).join("\n"));
+        copy.textContent = "Lista copiada";
+      } catch {
+        copy.textContent = "No se pudo copiar";
+      }
+    }, "copy");
+    section.append(copy);
     lists.append(section);
+  }
+  if (focus?.action) {
+    const controls = [...lists.querySelectorAll(".controls button:not(:disabled)")];
+    const sameItem = controls.filter((control) => control.dataset.key === focus.key);
+    const next = sameItem.find((control) => control.dataset.action === focus.action && control.dataset.store === focus.store)
+      || sameItem.find((control) => control.dataset.action === focus.action) || sameItem[0] || controls[0] || find("#compra");
+    next.focus({preventScroll: true});
   }
 }
 
+find("#suggestions").addEventListener("click", (event) => {
+  const suggestion = event.target.closest("button[data-query]");
+  if (!suggestion || find("#search button").disabled) return;
+  find("#query").value = suggestion.dataset.query;
+  find("#query").focus({preventScroll: true});
+  find("#search").requestSubmit(find("#search button"));
+});
+
 find("#search").addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (find("#search button").disabled) return;
   const terms = [...new Set(find("#query").value.split(",").map((term) => term.trim().toLowerCase()).filter(Boolean))];
   if (!terms.length || terms.length > 6 || terms.some((term) => term.length < 2 || term.length > 100)) {
+    status.dataset.state = "warning";
     status.textContent = "Ingresá hasta 6 búsquedas separadas por comas, de 2 a 100 caracteres cada una.";
     return;
   }
   const submit = event.submitter || find("#search button");
   submit.disabled = true;
+  find("#suggestions").hidden = true;
+  status.dataset.state = "loading";
   results.setAttribute("aria-busy", "true");
   status.textContent = "Consultando Monarca y Carrefour…";
   try {
@@ -226,10 +271,12 @@ find("#search").addEventListener("submit", async (event) => {
     }));
     groupsByTerm = responses;
     const missing = responses.filter((response) => response.errors.length);
+    const count = new Set(responses.flatMap((response) => response.groups.map(([key]) => key))).size;
+    status.dataset.state = missing.length ? "warning" : "";
     status.textContent = missing.length
       ? "Consulta incompleta. Reintentá: " + missing.map((item) => item.term + " (" + item.errors.join(" y ") + ")").join(", ") + "."
-      : "Elegí la marca y el tamaño que querés agregar.";
-    find("#count").textContent = new Set(responses.flatMap((response) => response.groups.map(([key]) => key))).size + " productos";
+      : count ? "Elegí la marca y el tamaño que querés agregar." : "No encontramos productos para esa búsqueda.";
+    find("#count").textContent = count + (count === 1 ? " producto" : " productos");
     for (const {groups} of responses) {
       for (const [key, offers] of groups) {
         if (basket.has(key) && offers.length >= basket.get(key).offers.length) basket.get(key).offers = offers;
