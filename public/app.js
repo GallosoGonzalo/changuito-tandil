@@ -119,18 +119,24 @@ function renderResults() {
       for (const offer of offers) {
         const line = el("div", undefined, "offer");
         const estimated = priceFor(offer, 1);
-        line.append(el("strong", offer.store + " · " + fmt(estimated.total)));
-        if (estimated.total < offer.price) line.append(" · regular " + fmt(offer.price));
+        const heading = el("div", undefined, "offer-heading");
+        heading.append(el("span", offer.store, "offer-store"), el("strong", fmt(estimated.total), "offer-price"));
+        line.append(heading);
+        if (estimated.total < offer.price) line.append(el("div", "Precio habitual: " + fmt(offer.price), "regular-price"));
         const promos = [...new Set(offer.promos.map((promo) => promo.label).filter(Boolean))];
-        if (promos.length) line.append(el("div", promos.join(" · "), "promo"));
+        if (promos.length) {
+          const promoList = el("div", undefined, "promo-list");
+          for (const promo of promos) promoList.append(el("span", promo, "promo"));
+          line.append(promoList);
+        }
         const pair = priceFor(offer, 2);
         if (offer.promos.some((promo) => promo.estimated && promo.group === 2) && pair.total < estimated.total * 2) {
-          line.append(el("div", "2 unidades por " + fmt(pair.total) + " · estimado", "promo"));
+          line.append(el("div", "Llevando 2: " + fmt(pair.total) + " total (estimado)", "promo pair-promo"));
         }
         prices.append(line);
       }
       details.append(prices);
-      const add = button("Agregar", () => {
+      const add = button("Agregar a mi compra", () => {
         changeQuantity(key, 1, offers);
         status.textContent = "Agregaste " + product.name + " a tu compra.";
       });
@@ -166,11 +172,12 @@ function renderBasket() {
   for (const [store, lines] of byStore) {
     const section = el("section", undefined, "store");
     const heading = el("div", undefined, "heading");
-    heading.append(el("h3", store), el("strong", fmt(lines.reduce((sum, line) => sum + line.total, 0))));
+      const storeTotal = lines.reduce((sum, line) => sum + line.total, 0);
+      heading.append(el("h3", store), el("strong", fmt(storeTotal)));
     section.append(heading);
     if (!lines.length) section.append(el("p", "Todavía sin productos.", "muted"));
     for (const line of lines) {
-      const row = el("div", undefined, "line");
+      const row = el("div", undefined, "line basket-line");
       const title = el("div", undefined, "heading");
       const name = el("a", line.quantity + " × " + line.product.name);
       name.href = line.product.link;
@@ -178,7 +185,7 @@ function renderBasket() {
       name.rel = "noopener noreferrer";
       title.append(name, el("strong", fmt(line.total), "subtotal"));
       row.append(title);
-      if (line.promo) row.append(el("div", line.promo, "promo"));
+      if (line.promo) row.append(el("div", "Promoción: " + line.promo, "promo"));
       const controls = el("div", undefined, "controls");
       const minus = button("−", () => changeQuantity(line.key, -1));
       minus.setAttribute("aria-label", "Quitar una unidad de " + line.product.name);
