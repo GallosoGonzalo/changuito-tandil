@@ -314,3 +314,30 @@ main, #compra, #productos, #promos, #query { scroll-margin-top: 5.3rem; }
   .promotions-summary { align-items: flex-start; flex-direction: column; }
   .promotions-summary-action { margin-left: 0; }
 }
+
+/* Claridad en cantidades, subtotales y filtros del folleto */
+.store-heading { display:flex; align-items:center; justify-content:space-between; gap:.75rem; }
+.store-total, .basket-item-subtotal { display:grid; justify-items:end; gap:.08rem; }
+.store-total span, .basket-item-subtotal span, .quantity-label { color:var(--muted); font-size:.82rem; }
+.store-total strong { font-size:1.05rem; }
+.basket-item-heading { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:.6rem; }
+.basket-item-heading a { line-height:1.35; font-weight:650; }
+.basket-item-subtotal strong { white-space:nowrap; font-size:.98rem; }
+.controls { flex-wrap:wrap; }
+.quantity-label { min-width:7.2rem; text-align:center; font-size:.9rem; font-weight:600; }
+.planning-help { grid-column:1/-1; margin-top:-.55rem; color:var(--muted); font-size:.8rem; }
+.promotion-filter {
+  display:flex; align-items:center; flex-wrap:wrap; gap:.45rem .75rem;
+  margin:.85rem 0 .2rem; font-size:.88rem; font-weight:650; color:var(--muted);
+}
+.promotion-filter select {
+  min-height:2.75rem; max-width:100%; padding:.45rem .7rem; border:1px solid var(--field-line);
+  border-radius:.45rem; background:var(--paper); color:var(--ink); font:inherit; font-weight:500;
+}
+.promotion-category h4 { margin-bottom:.65rem; }
+@media(max-width:34rem) {
+  .store-heading { align-items:flex-start; }
+  .basket-item-heading { grid-template-columns:minmax(0,1fr); }
+  .basket-item-subtotal { justify-items:start; }
+  .quantity-label { min-width:0; }
+}

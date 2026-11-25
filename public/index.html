@@ -69,9 +69,10 @@
         <p id="basket-caption" class="muted">Agregá productos para cotizar tu lista.</p>
         <div id="lists"></div>
         <div class="planning">
-          <label>Localidad <select id="postal"><option value="Tandil" selected>Tandil</option></select></label>
-          <label>Día para comparar <input id="purchase-date" type="date"></label>
-          <button type="button" id="quote" disabled>Cotizar y comparar<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+          <label>Localidad de entrega <select id="postal"><option value="Tandil" selected>Tandil</option></select></label>
+          <label>Fecha aproximada de compra <input id="purchase-date" type="date" aria-describedby="purchase-date-help"></label>
+          <p id="purchase-date-help" class="planning-help">Se usa para revisar qué promociones podrían estar vigentes ese día.</p>
+          <button type="button" id="quote" disabled>Calcular costo con envío<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
         </div>
         <p id="quote-status" class="muted" role="status"></p>
         <div id="scenarios"></div>
