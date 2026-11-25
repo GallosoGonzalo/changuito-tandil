@@ -120,13 +120,11 @@ def carrefour_products(data):
 
 def monarca_promotions():
     headers = {"User-Agent": "curl/8.5.0", "Accept": "*/*"}
-    # API pagination exposes the full online catalog but no verified category
-    # filter yet. Fetch every page and retain only products carrying promotions.
-    # Category grouping uses the product category returned by the API.
+    # The empty query returns the full online catalog in pages. Keep products
+    # with a currently active promotion and group by their returned category.
     categories = {}
     page = 0
-    total_pages = 1
-    while page < min(total_pages, 500):
+    while True:
         url = "https://api.monarcadigital.com.ar/products/search?" + urlencode({
             "page": page, "size": 100, "query": "",
         })
@@ -134,20 +132,24 @@ def monarca_promotions():
             data = json.load(response)
         product_data = data.get("products") or {}
         content = product_data.get("content") or []
-        total_pages = product_data.get("totalPages") or total_pages
         for raw in content:
             product = next(monarca_products({"products": {"content": [raw]}}), None)
             if not product:
                 continue
-            labels = [promo["label"] for promo in product["promos"] if promo.get("label")]
+            labels = [promo["label"] for promo in product["promos"]
+                      if promo.get("label") and promo.get("expires")]
             if not labels:
                 continue
             category = raw.get("category") or {}
             name = category.get("description") or category.get("name") or "Otros"
             categories.setdefault(name, []).append({**product, "promos": labels})
+        total_pages = (product_data.get("totalPages") or 1)
         page += 1
+        if page >= total_pages:
+            break
+        if page >= 500:
+            raise ValueError("Catálogo Monarca supera el máximo de páginas")
     return [{"name": name, "products": items} for name, items in sorted(categories.items())]
-
 
 def carrefour_promotions():
     # Carrefour's public promo page currently provides no product catalog and
