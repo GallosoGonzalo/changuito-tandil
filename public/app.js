@@ -10,6 +10,7 @@ let recommended = null;
 let basketRevision = 0;
 let groupsByTerm = [];
 let promotionCatalogEntries = [];
+const promotionCategoryFilters = new Map();
 const promotionsLoading = new Set();
 
 function readSaved(key, fallback) {
@@ -191,9 +192,38 @@ function renderPromotionCatalog(catalog) {
     } else if (!entry.categories.length) {
       section.append(el("p", "No encontramos promociones en esta página del catálogo.", "muted"));
     } else {
-      for (const category of entry.categories) {
+      const categories = entry.categories;
+      const available = categories.map((category) => category.name);
+      let selected = promotionCategoryFilters.get(entry.store) || "Todas";
+      if (selected !== "Todas" && !available.includes(selected)) {
+        selected = "Todas";
+        promotionCategoryFilters.set(entry.store, selected);
+      }
+      const filterLabel = el("label", undefined, "promotion-filter");
+      filterLabel.append(el("span", "Ver categoría de " + entry.store));
+      const filter = el("select");
+      filter.setAttribute("aria-label", "Filtrar promociones de " + entry.store + " por categoría");
+      const allOption = el("option", "Todas las categorías");
+      allOption.value = "Todas";
+      filter.append(allOption);
+      for (const category of categories) {
+        const option = el("option", category.name);
+        option.value = category.name;
+        filter.append(option);
+      }
+      filter.value = selected;
+      filter.addEventListener("change", () => {
+        promotionCategoryFilters.set(entry.store, filter.value);
+        renderPromotionCatalog(promotionCatalogEntries);
+      });
+      filterLabel.append(filter);
+      section.append(filterLabel);
+      const visibleCategories = selected === "Todas"
+        ? categories
+        : categories.filter((category) => category.name === selected);
+      for (const category of visibleCategories) {
         const group = el("section", undefined, "promotion-category");
-        group.append(el("h4", category.name + " (" + category.products.length + ")"));
+        group.append(el("h4", category.name + " · " + category.products.length + " ofertas"));
         const grid = el("div", undefined, "promotion-list");
         for (const offer of category.products) {
           const card = el("article", undefined, "promotion-card");
@@ -305,17 +335,22 @@ function renderBasket() {
   for (const [store, lines] of byStore) {
     if (!lines.length) continue;
     const section = el("section", undefined, "store");
-    const heading = el("div", undefined, "heading");
-    heading.append(el("h3", store), el("strong", fmt(lines.reduce((sum, line) => sum + line.total, 0))));
+    const heading = el("div", undefined, "store-heading");
+    heading.append(el("h3", store));
+    const storeTotal = el("div", undefined, "store-total");
+    storeTotal.append(el("span", "Subtotal de " + store), el("strong", fmt(lines.reduce((sum, line) => sum + line.total, 0))));
+    heading.append(storeTotal);
     section.append(heading);
     for (const line of lines) {
       const row = el("div", undefined, "line");
-      const title = el("div", undefined, "heading");
-      const name = el("a", line.quantity + " × " + line.product.name);
+      const title = el("div", undefined, "basket-item-heading");
+      const name = el("a", line.product.name);
       name.href = line.product.link;
       name.target = "_blank";
       name.rel = "noopener noreferrer";
-      title.append(name, el("strong", fmt(line.total), "subtotal"));
+      const price = el("div", undefined, "basket-item-subtotal");
+      price.append(el("span", "Subtotal"), el("strong", fmt(line.total)));
+      title.append(name, price);
       row.append(title);
       if (line.promo) row.append(el("div", line.promo, "promo"));
       const controls = el("div", undefined, "controls");
@@ -327,11 +362,12 @@ function renderBasket() {
         Object.assign(control.dataset, {key: line.key, store, action});
       }
       plus.disabled = basket.get(line.key).quantity >= 99;
-      controls.append(minus, el("span", basket.get(line.key).quantity + " en total", "muted"), plus);
+      const quantity = basket.get(line.key).quantity;
+      controls.append(minus, el("span", "Cantidad: " + quantity + (quantity === 1 ? " unidad" : " unidades"), "quantity-label"), plus);
       row.append(controls);
       section.append(row);
     }
-    const copy = button("Copiar lista", async () => {
+    const copy = button("Copiar lista de " + store, async () => {
       try {
         await navigator.clipboard.writeText(lines.map((line) => line.quantity + " × " + line.product.name).join("\n"));
         copy.textContent = "Lista copiada";
