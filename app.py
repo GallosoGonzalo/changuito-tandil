@@ -43,9 +43,14 @@ def monarca_promo(promo):
     kind = promo.get("type")
     group = max(1, quantity or 0) if kind == "PERCENTAGE_OFF" else quantity
     expires = active(promo)
-    if expires is None or promo.get("weekDays") or kind not in {"PERCENTAGE_OFF", "PERCENTAGE_N_OFF", "NXM"}:
+    # Keep weekday/card-limited campaigns visible in the brochure. The
+    # comparator only applies a promo price when its mechanics are verified.
+    if expires is None or kind not in {"PERCENTAGE_OFF", "PERCENTAGE_N_OFF", "NXM"}:
         price = None
-    return {"label": label, "group": group, "price": price, "card": False, "expires": expires}
+    return {
+        "label": label, "group": group, "price": price, "card": False,
+        "expires": expires, "weekDays": promo.get("weekDays") or [],
+    }
 
 
 def barcode(value):
@@ -116,6 +121,61 @@ def carrefour_products(data):
                 "image": next((image.get("imageUrl") for image in item.get("images") or []), None),
                 "promos": promos, "link": "https://www.carrefour.com.ar/" + product["linkText"] + "/p",
             }
+
+
+def monarca_promotions():
+    headers = {"User-Agent": "curl/8.5.0", "Accept": "*/*"}
+    # The empty query returns the full online catalog in pages. Keep products
+    # with a currently active promotion and group by their returned category.
+    categories = {}
+    page = 0
+    while True:
+        url = "https://api.monarcadigital.com.ar/products/search?" + urlencode({
+            "page": page, "size": 100, "query": "",
+        })
+        with urlopen(Request(url, headers=headers), timeout=15) as response:
+            data = json.load(response)
+        product_data = data.get("products") or {}
+        content = product_data.get("content") or []
+        for raw in content:
+            product = next(monarca_products({"products": {"content": [raw]}}), None)
+            if not product:
+                continue
+            labels = [promo["label"] for promo in product["promos"]
+                      if promo.get("label")]
+            if not labels:
+                continue
+            category = raw.get("category") or {}
+            name = category.get("description") or category.get("name") or "Otros"
+            categories.setdefault(name, []).append({**product, "promos": labels})
+        total_pages = (product_data.get("totalPages") or 1)
+        page += 1
+        if page >= total_pages:
+            break
+        if page >= 500:
+            raise ValueError("Catálogo Monarca supera el máximo de páginas")
+    return [{"name": name, "products": items} for name, items in sorted(categories.items())]
+
+def carrefour_promotions():
+    # Carrefour's public promo page currently provides no product catalog and
+    # VTEX search does not expose a verified "all promotions" filter here.
+    # Do not fabricate a full catalog by scraping arbitrary search results.
+    raise ValueError("Catálogo completo de promociones no disponible")
+
+
+@lru_cache(maxsize=4)
+def promotion_catalog(cache_window):
+    jobs = {"Monarca": monarca_promotions, "Carrefour": carrefour_promotions}
+    result = []
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        tasks = {pool.submit(fetcher): store for store, fetcher in jobs.items()}
+        for task in as_completed(tasks):
+            store = tasks[task]
+            try:
+                result.append({"store": store, "categories": task.result()})
+            except (OSError, ValueError, KeyError, TypeError):
+                result.append({"store": store, "error": True})
+    return sorted(result, key=lambda item: STORES.index(item["store"]))
 
 
 @lru_cache(maxsize=128)
@@ -269,6 +329,10 @@ class Handler(BaseHTTPRequestHandler):
             name, mime = assets[url.path]
             content_type = mime + "; charset=utf-8" if mime != "font/woff2" else mime
             self.send(200, content_type, (ROOT / "public" / name).read_bytes())
+            return
+        if url.path == "/api/promotions":
+            catalog = promotion_catalog(int(time.time() // 600))
+            self.send_json({"stores": catalog})
             return
         if url.path != "/api/search":
             self.send_json({"error": "Ruta desconocida."}, 404)

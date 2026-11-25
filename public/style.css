@@ -261,3 +261,10 @@ main, #compra, #productos, #promos, #query { scroll-margin-top: 5.3rem; }
   .scenario { grid-template-columns: .88rem 1fr; }
   .scenario-price { grid-column: 2; }
 }
+
+/* Catálogo de promociones independiente de la búsqueda */
+.promotion-store-section { margin-top: 1.4rem; }
+.promotion-store-title { padding-bottom: .55rem; border-bottom: 1px solid #bac3ad; font-size: 1.35rem; }
+.promotion-category { margin-top: 1rem; }
+.promotion-category h4 { font-size: 1.05rem; margin-bottom: .5rem; }
+.promotion-category h5 { font-size: 1rem; line-height: 1.35; }
