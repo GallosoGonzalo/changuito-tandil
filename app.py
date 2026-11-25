@@ -118,41 +118,34 @@ def carrefour_products(data):
             }
 
 
-def monarca_category_url(category_id, page, size=100):
-    return "https://api.monarcadigital.com.ar/products/search?" + urlencode({
-        "page": page, "size": size, "categoryId": category_id,
-    })
-
-
 def monarca_promotions():
     headers = {"User-Agent": "curl/8.5.0", "Accept": "*/*"}
-    categories_url = "https://api.monarcadigital.com.ar/categories"
-    with urlopen(Request(categories_url, headers=headers), timeout=12) as response:
-        category_data = json.load(response)
-    # The public app's online "Promociones" category ID is 900002. Keep this
-    # scoped to that category and paginate using metadata returned by the API.
-    result = []
+    # API pagination exposes the full online catalog but no verified category
+    # filter yet. Fetch every page and retain only products carrying promotions.
+    # Category grouping uses the product category returned by the API.
+    categories = {}
     page = 0
-    while page < 100:
-        with urlopen(Request(monarca_category_url(900002, page), headers=headers), timeout=12) as response:
+    total_pages = 1
+    while page < min(total_pages, 500):
+        url = "https://api.monarcadigital.com.ar/products/search?" + urlencode({
+            "page": page, "size": 100, "query": "",
+        })
+        with urlopen(Request(url, headers=headers), timeout=15) as response:
             data = json.load(response)
-        products = list(monarca_products(data))
-        for product, raw in zip(products, data["products"]["content"]):
-            promos = [promo.get("label") for promo in product["promos"] if promo.get("label")]
-            if not promos:
+        product_data = data.get("products") or {}
+        content = product_data.get("content") or []
+        total_pages = product_data.get("totalPages") or total_pages
+        for raw in content:
+            product = next(monarca_products({"products": {"content": [raw]}}), None)
+            if not product:
+                continue
+            labels = [promo["label"] for promo in product["promos"] if promo.get("label")]
+            if not labels:
                 continue
             category = raw.get("category") or {}
-            result.append({
-                "category": category.get("description") or category.get("name") or "Otros",
-                "product": {**product, "promos": promos},
-            })
-        pages = (data.get("products") or {}).get("totalPages")
-        if not pages or page + 1 >= pages:
-            break
+            name = category.get("description") or category.get("name") or "Otros"
+            categories.setdefault(name, []).append({**product, "promos": labels})
         page += 1
-    categories = {}
-    for entry in result:
-        categories.setdefault(entry["category"], []).append(entry["product"])
     return [{"name": name, "products": items} for name, items in sorted(categories.items())]
 
 
@@ -165,12 +158,8 @@ def carrefour_promotions():
 
 @lru_cache(maxsize=4)
 def promotion_catalog(cache_window):
+    jobs = {"Monarca": monarca_promotions, "Carrefour": carrefour_promotions}
     result = []
-    errors = []
-    jobs = {
-        "Monarca": monarca_promotions,
-        "Carrefour": carrefour_promotions,
-    }
     with ThreadPoolExecutor(max_workers=2) as pool:
         tasks = {pool.submit(fetcher): store for store, fetcher in jobs.items()}
         for task in as_completed(tasks):
