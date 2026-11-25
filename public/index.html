@@ -68,9 +68,10 @@
         <div class="basket-summary"><span id="basket-label">Subtotal de productos</span><strong id="total">$0</strong></div>
         <p id="basket-caption" class="muted">Agregá productos para cotizar tu lista.</p>
         <div id="lists"></div>
-        <div class="planning">
-          <label>Localidad de entrega <select id="postal"><option value="Tandil" selected>Tandil</option></select></label>
-          <label>Fecha aproximada de compra <input id="purchase-date" type="date" aria-describedby="purchase-date-help"></label>
+        <div class="planning" hidden>
+          <h3>Entrega a domicilio</h3>
+          <label>Fecha de compra <input id="purchase-date" type="date" aria-describedby="purchase-date-help"></label>
+          <p class="muted delivery-location">Entrega en Tandil</p>
           <p id="purchase-date-help" class="planning-help">Se usa para revisar qué promociones podrían estar vigentes ese día.</p>
           <button type="button" id="quote" disabled>Calcular costo con envío<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
         </div>
@@ -81,12 +82,11 @@
 
     <details class="promotions-section promotions-accordion" id="promos" aria-labelledby="promotions-title">
       <summary class="promotions-summary">
-        <span class="promotions-kicker">FOLLETO DIGITAL</span>
-        <h2 id="promotions-title">Promociones de los supermercados</h2>
-        <span class="promotions-summary-action" aria-hidden="true">Ver promociones</span>
+        <h2 id="promotions-title">Promociones</h2>
+        <span class="promotions-summary-action" aria-hidden="true"></span>
       </summary>
       <div class="promotions-content">
-        <p class="muted">Ofertas agrupadas por supermercado y categoría. Navegá las páginas de cada tienda para mantener la carga liviana. Confirmá siempre el precio y las condiciones en la tienda.</p>
+        <p class="muted">Elegí una categoría en Monarca o Carrefour. Confirmá el precio y las condiciones en la tienda.</p>
         <div id="promotion-status" class="muted" role="status" aria-live="polite">Abrí el folleto para cargar las promociones.</div>
         <div id="promotion-stores"></div>
       </div>

@@ -2,7 +2,6 @@
 
 const quoteButton = find("#quote");
 const quoteStatus = find("#quote-status");
-const postalInput = find("#postal");
 const purchaseDate = find("#purchase-date");
 const tandilDate = new Intl.DateTimeFormat("sv-SE", {timeZone: "America/Argentina/Buenos_Aires", dateStyle: "short"});
 const today = () => tandilDate.format(new Date());
@@ -150,5 +149,4 @@ quoteButton.addEventListener("click", async () => {
   }
 });
 
-postalInput.addEventListener("change", resetQuote);
 purchaseDate.addEventListener("change", resetQuote);

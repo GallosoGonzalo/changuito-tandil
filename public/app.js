@@ -202,6 +202,7 @@ function renderPromotionCatalog(catalog) {
       const filterLabel = el("label", undefined, "promotion-filter");
       filterLabel.append(el("span", "Ver categoría de " + entry.store));
       const filter = el("select");
+      filter.dataset.store = entry.store;
       filter.setAttribute("aria-label", "Filtrar promociones de " + entry.store + " por categoría");
       const allOption = el("option", "Todas las categorías");
       allOption.value = "Todas";
@@ -215,6 +216,8 @@ function renderPromotionCatalog(catalog) {
       filter.addEventListener("change", () => {
         promotionCategoryFilters.set(entry.store, filter.value);
         renderPromotionCatalog(promotionCatalogEntries);
+        [...root.querySelectorAll(".promotion-filter select")]
+          .find((select) => select.dataset.store === entry.store)?.focus({preventScroll: true});
       });
       filterLabel.append(filter);
       section.append(filterLabel);
@@ -329,7 +332,8 @@ function renderBasket() {
   find(".basket-link").setAttribute("aria-label", "Tu compra: " + units + (units === 1 ? " unidad" : " unidades"));
   find("#basket-label").textContent = recommended ? "Costo final estimado" : "Subtotal de productos";
   find("#basket-caption").textContent = recommended ? "Con envío cotizado; sin cupones ni beneficios bancarios." :
-    basket.size ? "Antes de cotizar el envío." : "Agregá productos para cotizar tu lista.";
+    basket.size ? "Antes de cotizar el envío." : "Buscá un producto y tocá Agregar para armar tu lista.";
+  find(".planning").hidden = !basket.size;
   find("#quote").disabled = !basket.size || find("#quote").getAttribute("aria-busy") === "true";
   lists.replaceChildren();
   for (const [store, lines] of byStore) {
@@ -338,7 +342,7 @@ function renderBasket() {
     const heading = el("div", undefined, "store-heading");
     heading.append(el("h3", store));
     const storeTotal = el("div", undefined, "store-total");
-    storeTotal.append(el("span", "Subtotal de " + store), el("strong", fmt(lines.reduce((sum, line) => sum + line.total, 0))));
+    storeTotal.append(el("span", "Subtotal de productos"), el("strong", fmt(lines.reduce((sum, line) => sum + line.total, 0))));
     heading.append(storeTotal);
     section.append(heading);
     for (const line of lines) {
