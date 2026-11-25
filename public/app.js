@@ -9,6 +9,10 @@ const status = find("#status");
 let recommended = null;
 let basketRevision = 0;
 let groupsByTerm = [];
+let promotionCatalogEntries = [];
+let promotionPage = 0;
+let promotionHasMore = false;
+let promotionsLoading = false;
 
 function readSaved(key, fallback) {
   try {
@@ -158,6 +162,37 @@ function renderResults() {
   }
 }
 
+function mergePromotionCatalog(incoming, page) {
+  if (page === 0) {
+    promotionCatalogEntries = incoming;
+    return;
+  }
+  for (const entry of incoming) {
+    const current = promotionCatalogEntries.find((item) => item.store === entry.store);
+    if (!current || !Array.isArray(entry.categories) || !Array.isArray(current.categories)) {
+      if (current) Object.assign(current, entry);
+      else promotionCatalogEntries.push(entry);
+      continue;
+    }
+    const categories = new Map(current.categories.map((category) => [category.name, category]));
+    for (const category of entry.categories) {
+      const existing = categories.get(category.name);
+      if (!existing) categories.set(category.name, category);
+      else {
+        const seen = new Set(existing.products.map((product) => product.id));
+        existing.products.push(...category.products.filter((product) => {
+          if (seen.has(product.id)) return false;
+          seen.add(product.id);
+          return true;
+        }));
+      }
+    }
+    current.categories = [...categories.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
+    current.hasMore = entry.hasMore;
+    delete current.error;
+  }
+}
+
 function renderPromotionCatalog(catalog) {
   const root = find("#promotion-stores");
   const status = find("#promotion-status");
@@ -176,7 +211,7 @@ function renderPromotionCatalog(catalog) {
     const section = el("section", undefined, "promotion-store-section");
     section.append(el("h3", entry.store, "promotion-store-title"));
     if (!entry.categories.length) {
-      section.append(el("p", "La tienda no informó promociones de productos en su catálogo.", "muted"));
+      section.append(el("p", "La tienda no informó promociones de productos en este tramo del catálogo.", "muted"));
     }
     for (const category of entry.categories) {
       const group = el("section", undefined, "promotion-category");
@@ -205,26 +240,42 @@ function renderPromotionCatalog(catalog) {
     const section = el("section", undefined, "promotion-store-section");
     section.append(el("h3", store, "promotion-store-title"));
     const message = store === "Carrefour"
-      ? "El catálogo completo de promociones de Carrefour no está disponible ahora."
+      ? "No pudimos leer el catálogo online de promociones de Carrefour."
       : "No pudimos cargar el catálogo de promociones.";
     section.append(el("p", message, "muted"));
     root.append(section);
   }
-
 }
 
-async function loadPromotionCatalog() {
+async function loadPromotionCatalog(page = 0) {
   const status = find("#promotion-status");
-  if (!status) return;
-  status.textContent = "Cargando promociones…";
+  const loadButton = find("#more-promotions");
+  if (!status || promotionsLoading) return;
+  promotionsLoading = true;
+  if (page === 0) status.textContent = "Cargando promociones…";
+  else status.textContent = "Cargando más promociones de Carrefour…";
+  loadButton.disabled = true;
   try {
-    const response = await fetch("/api/promotions", {signal: AbortSignal.timeout(45000)});
+    const suffix = page ? "?page=" + page : "";
+    const response = await fetch("/api/promotions" + suffix, {signal: AbortSignal.timeout(45000)});
     const data = await response.json();
-    renderPromotionCatalog(data.stores || []);
+    if (!response.ok) throw new Error(data.error || "Error al cargar promociones");
+    mergePromotionCatalog(data.stores || [], page);
+    promotionPage = page;
+    const carrefour = (data.stores || []).find((entry) => entry.store === "Carrefour");
+    promotionHasMore = Boolean(carrefour?.hasMore);
+    renderPromotionCatalog(promotionCatalogEntries);
   } catch {
-    status.textContent = "No pudimos cargar los folletos. Volvé a intentarlo más tarde.";
+    if (page === 0) status.textContent = "No pudimos cargar los folletos. Volvé a intentarlo más tarde.";
+    else status.textContent = "No pudimos cargar más ofertas. Podés intentarlo de nuevo.";
+  } finally {
+    promotionsLoading = false;
+    loadButton.hidden = !promotionHasMore;
+    loadButton.disabled = false;
   }
 }
+
+find("#more-promotions")?.addEventListener("click", () => loadPromotionCatalog(promotionPage + 1));
 
 function resetQuote() {
   basketRevision++;
