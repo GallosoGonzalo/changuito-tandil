@@ -156,47 +156,63 @@ function renderResults() {
       results.append(row);
     }
   }
-  renderPromotionCatalog();
 }
 
-function renderPromotionCatalog() {
-  const list = find("#promotion-list");
-  if (!list) return;
-  list.replaceChildren();
-  const entries = [];
-  const seen = new Set();
-  for (const {groups} of groupsByTerm) {
-    for (const [key, offers] of groups) {
-      for (const offer of offers) {
-        const labels = [...new Set((offer.promos || []).map((promo) => promo.label).filter(Boolean))];
-        if (!labels.length) continue;
-        const unique = offer.store + ":" + offer.id + ":" + labels.join("|");
-        if (seen.has(unique)) continue;
-        seen.add(unique);
-        entries.push({key, offer, labels});
-      }
-    }
-  }
-  if (!entries.length) {
-    list.append(el("p", groupsByTerm.length
-      ? "No encontramos promociones en estos resultados. Probá otra búsqueda."
-      : "Buscá productos para ver las ofertas disponibles.", "muted"));
+function renderPromotionCatalog(catalog) {
+  const root = find("#promotion-stores");
+  const status = find("#promotion-status");
+  if (!root || !status) return;
+  root.replaceChildren();
+  const storesWithResults = (catalog || []).filter((entry) => Array.isArray(entry.categories));
+  const failed = (catalog || []).filter((entry) => entry.error).map((entry) => entry.store);
+  if (!storesWithResults.length) {
+    status.textContent = "No pudimos cargar los folletos. Volvé a intentarlo más tarde.";
     return;
   }
-  for (const {offer, labels} of entries) {
-    const card = el("article", undefined, "promotion-card");
-    card.append(el("span", offer.store, "promotion-store"));
-    card.append(el("h3", offer.name));
-    card.append(el("strong", "Precio publicado: " + fmt(offer.price), "promotion-price"));
-    const tags = el("ul", undefined, "promotion-tags");
-    for (const label of labels) tags.append(el("li", label));
-    card.append(tags);
-    const link = el("a", "Ver producto en la tienda");
-    link.href = offer.link;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    card.append(link);
-    list.append(card);
+  status.textContent = failed.length
+    ? "Catálogos disponibles: " + storesWithResults.map((entry) => entry.store).join(", ") + ". No se pudo cargar: " + failed.join(", ") + "."
+    : "Promociones agrupadas por supermercado y categoría.";
+  for (const entry of storesWithResults) {
+    const section = el("section", undefined, "promotion-store-section");
+    section.append(el("h3", entry.store, "promotion-store-title"));
+    if (!entry.categories.length) {
+      section.append(el("p", "La tienda no informó promociones de productos en su catálogo.", "muted"));
+    }
+    for (const category of entry.categories) {
+      const group = el("section", undefined, "promotion-category");
+      group.append(el("h4", category.name + " (" + category.products.length + ")"));
+      const grid = el("div", undefined, "promotion-list");
+      for (const offer of category.products) {
+        const card = el("article", undefined, "promotion-card");
+        card.append(el("h5", offer.name));
+        card.append(el("strong", "Precio publicado: " + fmt(offer.price), "promotion-price"));
+        const tags = el("ul", undefined, "promotion-tags");
+        for (const label of offer.promos) tags.append(el("li", label));
+        card.append(tags);
+        const link = el("a", "Ver producto en la tienda");
+        link.href = offer.link;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        card.append(link);
+        grid.append(card);
+      }
+      group.append(grid);
+      section.append(group);
+    }
+    root.append(section);
+  }
+}
+
+async function loadPromotionCatalog() {
+  const status = find("#promotion-status");
+  if (!status) return;
+  status.textContent = "Cargando promociones…";
+  try {
+    const response = await fetch("/api/promotions", {signal: AbortSignal.timeout(45000)});
+    const data = await response.json();
+    renderPromotionCatalog(data.stores || []);
+  } catch {
+    status.textContent = "No pudimos cargar los folletos. Volvé a intentarlo más tarde.";
   }
 }
 
@@ -334,3 +350,5 @@ find("#search").addEventListener("submit", async (event) => {
 });
 
 renderBasket();
+
+loadPromotionCatalog();
