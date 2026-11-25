@@ -197,6 +197,15 @@ function renderPromotionCatalog(catalog) {
         const grid = el("div", undefined, "promotion-list");
         for (const offer of category.products) {
           const card = el("article", undefined, "promotion-card");
+          if (offer.image?.startsWith("https://")) {
+            const image = el("img", undefined, "promotion-image");
+            image.src = offer.image;
+            image.alt = "";
+            image.loading = "lazy";
+            image.decoding = "async";
+            image.addEventListener("error", () => image.remove(), {once: true});
+            card.append(image);
+          }
           card.append(el("h5", offer.name));
           card.append(el("strong", "Precio publicado: " + fmt(offer.price), "promotion-price"));
           const tags = el("ul", undefined, "promotion-tags");
