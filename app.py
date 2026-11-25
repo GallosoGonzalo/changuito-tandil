@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import re
 import time
-from urllib.parse import parse_qs, quote, urlencode, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlencode, urlsplit
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
@@ -43,9 +43,14 @@ def monarca_promo(promo):
     kind = promo.get("type")
     group = max(1, quantity or 0) if kind == "PERCENTAGE_OFF" else quantity
     expires = active(promo)
-    if expires is None or promo.get("weekDays") or kind not in {"PERCENTAGE_OFF", "PERCENTAGE_N_OFF", "NXM"}:
+    # Keep weekday/card-limited campaigns visible in the brochure. The
+    # comparator only applies a promo price when its mechanics are verified.
+    if expires is None or kind not in {"PERCENTAGE_OFF", "PERCENTAGE_N_OFF", "NXM"}:
         price = None
-    return {"label": label, "group": group, "price": price, "card": False, "expires": expires}
+    return {
+        "label": label, "group": group, "price": price, "card": False,
+        "expires": expires, "weekDays": promo.get("weekDays") or [],
+    }
 
 
 def barcode(value):
@@ -71,10 +76,14 @@ def monarca_products(data):
         }
 
 
-def carrefour_products(data):
+def carrefour_products(data, seller_id=None):
     for product in data["products"]:
         for item in product.get("items") or []:
-            offers = [{**(seller.get("commertialOffer") or {}), "seller": str(seller["sellerId"])} for seller in item.get("sellers") or []]
+            offers = [
+                {**(seller.get("commertialOffer") or {}), "seller": str(seller["sellerId"])}
+                for seller in item.get("sellers") or []
+                if seller_id is None or str(seller.get("sellerId")) == seller_id
+            ]
             offers = [offer for offer in offers if offer.get("AvailableQuantity", 0) > 0 and (cents(offer.get("Price")) or 0) > 0]
             if not offers:
                 continue
@@ -84,38 +93,180 @@ def carrefour_products(data):
             regular = cents(offer.get("ListPrice"))
             if regular and regular > price:
                 promos.append({"label": f"Rebaja incluida · antes ${regular / 100:,.2f}".translate(str.maketrans(",.", ".,")), "price": None})
-            for highlight in offer.get("discountHighlights") or []:
+            highlights = offer.get("discountHighlights") or offer.get("DiscountHighLight") or []
+            for highlight in highlights:
                 promos.append({"label": highlight.get("name"), "price": None})
-            for teaser in offer.get("teasers") or []:
-                label = teaser.get("name")
-                conditions = teaser.get("conditions") or {}
-                discount = (teaser.get("effects") or {}).get("parameters") or []
+            teasers = (offer.get("PromotionTeasers") or offer.get("promotionTeasers")
+                       or offer.get("teasers") or offer.get("Teasers")
+                       or product.get("PromotionTeasers") or product.get("promotionTeasers") or product.get("teasers") or [])
+            for teaser in teasers:
+                label = teaser.get("name") or teaser.get("Name") or teaser.get("<Name>k__BackingField")
+                conditions = (teaser.get("conditions") or teaser.get("Conditions")
+                              or teaser.get("<Conditions>k__BackingField") or {})
+                condition_parameters = (conditions.get("parameters") or conditions.get("Parameters")
+                                        or conditions.get("<Parameters>k__BackingField") or [])
+                minimum_quantity = (conditions.get("minimumQuantity") or conditions.get("MinimumQuantity")
+                                    or conditions.get("<MinimumQuantity>k__BackingField") or 0)
+                general_values = (teaser.get("generalValues") or teaser.get("GeneralValues")
+                                 or teaser.get("<GeneralValues>k__BackingField"))
+                effects = (teaser.get("effects") or teaser.get("Effects")
+                           or teaser.get("<Effects>k__BackingField") or {})
+                discount = (effects.get("parameters") or effects.get("Parameters")
+                            or effects.get("<Parameters>k__BackingField") or [])
+                def parameter_value(parameter, key):
+                    title = key.title()
+                    return (parameter.get(key) or parameter.get(title)
+                            or parameter.get("<" + title + ">k__BackingField"))
+                bins = {parameter_value(param, "name") for param in condition_parameters}
+                card_discount = [
+                    {"name": parameter_value(param, "name"), "value": parameter_value(param, "value")}
+                    for param in discount
+                ]
                 card = (
                     label == "Tarjeta Carrefour 15%"
-                    and {param.get("name") for param in (conditions.get("parameters") or [])} == {"RestrictionsBins"}
-                    and not teaser.get("generalValues")
-                    and not conditions.get("minimumQuantity")
-                    and discount == [{"name": "PercentualDiscount", "value": "15"}]
+                    and bins == {"RestrictionsBins"}
+                    and not general_values
+                    and not minimum_quantity
+                    and card_discount == [{"name": "PercentualDiscount", "value": "15"}]
                 )
                 promo = {"label": label, "price": (price * 85 + 50) // 100 if card else None, "group": 1, "card": card}
                 pair = re.match(r"^PROMO-2do al (\d+)%\s+Max (\d+) unidades\b", label or "", re.IGNORECASE)
-                params = {param.get("name"): param.get("value") for param in conditions.get("parameters") or []}
-                effect = next((param.get("value") for param in discount if param.get("name") == "PercentualDiscount"), None)
-                if pair and conditions.get("minimumQuantity") == 2 and set(params) == {"SkuIdsList"}:
+                params = {parameter_value(param, "name"): parameter_value(param, "value") for param in condition_parameters}
+                effect = next((parameter_value(param, "value") for param in discount
+                               if parameter_value(param, "name") == "PercentualDiscount"), None)
+                if pair and minimum_quantity == 2 and set(params) == {"SkuIdsList"}:
                     percent, limit = map(int, pair.groups())
                     if (
-                        0 < percent <= 100 and limit >= 2 and not teaser.get("generalValues")
+                        0 < percent <= 100 and limit >= 2 and not general_values
                         and str(item["itemId"]) in (params["SkuIdsList"] or "").split(",")
                         and len(discount) == 1 and cents(effect) == percent * 50
                     ):
                         promo.update(group=2, limit=limit, price=(price * (200 - percent) + 50) // 100, estimated=True)
                 promos.append(promo)
+            clusters = product.get("productClusters") or {}
+            if isinstance(clusters, list):
+                clusters = {str(cluster.get("id")): cluster.get("name") for cluster in clusters if isinstance(cluster, dict)}
+            cluster_promos = [
+                name for name in clusters.values()
+                if isinstance(name, str) and re.search(r"\b(2do|segunda|3x2|4x3|\d+%|ahorro|descuento|promo)", name, re.I)
+            ]
+            promos.extend({"label": name, "price": None, "estimated": True} for name in cluster_promos)
+            categories = product.get("categories") or []
+            if isinstance(categories, str):
+                categories = [categories]
             yield {
                 "store": "Carrefour", "id": str(item["itemId"]), "seller": offer["seller"], "price": price,
                 "ean": barcode(item.get("ean")), "name": product["productName"],
                 "image": next((image.get("imageUrl") for image in item.get("images") or []), None),
-                "promos": promos, "link": "https://www.carrefour.com.ar/" + product["linkText"] + "/p",
+                "promos": promos, "categories": categories,
+                "link": "https://www.carrefour.com.ar/" + product["linkText"] + "/p",
             }
+
+
+PROMOTION_PAGE_SIZE = 100
+CARREFOUR_PROMOTION_PAGE_SIZE = 50
+
+
+@lru_cache(maxsize=256)
+def monarca_promotions(page, cache_window):
+    headers = {"User-Agent": "curl/8.5.0", "Accept": "*/*"}
+    url = "https://api.monarcadigital.com.ar/products/search?" + urlencode({
+        "page": page, "size": PROMOTION_PAGE_SIZE, "query": "",
+    })
+    with urlopen(Request(url, headers=headers), timeout=15) as response:
+        data = json.load(response)
+    product_data = data.get("products") or {}
+    categories = {}
+    for raw in product_data.get("content") or []:
+        product = next(monarca_products({"products": {"content": [raw]}}), None)
+        if not product:
+            continue
+        labels = [promo["label"] for promo in product["promos"] if promo.get("label")]
+        if not labels:
+            continue
+        category = raw.get("category") or {}
+        name = category.get("description") or category.get("name") or "Otros"
+        categories.setdefault(name, []).append({**product, "promos": labels})
+    total_pages = int(product_data.get("totalPages") or 1)
+    has_more = page + 1 < total_pages
+    return [{"name": name, "products": items} for name, items in sorted(categories.items())], has_more
+
+def _carrefour_category(product):
+    paths = product.get("categories") or []
+    for path in reversed(paths):
+        parts = [unquote(part).strip() for part in str(path).split("/") if part.strip()]
+        if parts:
+            return parts[-1].replace("-", " ").title()
+    name = product.get("name", "").casefold()
+    choices = (
+        ("Almacén", ("yerba", "azucar", "arroz", "fideo", "galletita", "conserva")),
+        ("Bebidas", ("bebida", "gaseosa", "agua", "cerveza", "vino")),
+        ("Lácteos y frescos", ("leche", "queso", "yogur", "carne", "fruta", "verdura")),
+        ("Limpieza", ("detergente", "lavandina", "limpieza")),
+        ("Perfumería", ("shampoo", "perfumer", "higiene")),
+        ("Mascotas", ("mascota", "perro", "gato")),
+        ("Hogar", ("hogar", "bazar", "textil")),
+    )
+    for category, terms in choices:
+        if any(term in name for term in terms):
+            return category
+    return "Otros"
+
+
+@lru_cache(maxsize=256)
+def carrefour_promotions(page, cache_window):
+    # Read one catalog page at a time so the initial request stays small.
+    def fetch_catalog_page(catalog_page):
+        start = catalog_page * CARREFOUR_PROMOTION_PAGE_SIZE
+        headers = {"User-Agent": "curl/8.5.0", "Accept": "*/*"}
+        params = {"O": "OrderByBestDiscountDESC", "_from": start, "_to": start + CARREFOUR_PROMOTION_PAGE_SIZE - 1}
+        url = "https://www.carrefour.com.ar/api/catalog_system/pub/products/search?" + urlencode(params)
+        try:
+            with urlopen(Request(url, headers=headers), timeout=8) as response:
+                return json.load(response)
+        except OSError:
+            fallback = "https://www.carrefour.com.ar/api/catalog_system/pub/products/search?" + urlencode(
+                {"_from": start, "_to": start + CARREFOUR_PROMOTION_PAGE_SIZE - 1}
+            )
+            with urlopen(Request(fallback, headers=headers), timeout=8) as response:
+                return json.load(response)
+
+    catalog_page = fetch_catalog_page(page)
+    categories = {}
+    seen = set()
+    for product in carrefour_products({"products": catalog_page}, seller_id="1"):
+        labels = list(dict.fromkeys(
+            promo.get("label") + (" · condición a confirmar" if promo.get("estimated") else "")
+            for promo in product.get("promos") or [] if promo.get("label")
+        ))
+        if not labels or product["id"] in seen:
+            continue
+        seen.add(product["id"])
+        product["promos"] = labels
+        category = _carrefour_category(product)
+        categories.setdefault(category, []).append(product)
+    has_more = len(catalog_page) == CARREFOUR_PROMOTION_PAGE_SIZE
+    return [{"name": name, "products": items} for name, items in sorted(categories.items())], has_more
+
+@lru_cache(maxsize=512)
+def promotion_catalog(cache_window, page=0, store=None):
+    selected = (store,) if store else STORES
+    jobs = {
+        "Monarca": lambda: monarca_promotions(page, cache_window),
+        "Carrefour": lambda: carrefour_promotions(page, cache_window),
+    }
+    result = []
+    with ThreadPoolExecutor(max_workers=len(selected)) as pool:
+        tasks = {pool.submit(jobs[name]): name for name in selected}
+        for task in as_completed(tasks):
+            name = tasks[task]
+            try:
+                categories, has_more = task.result()
+                result.append({"store": name, "page": page, "categories": categories, "hasMore": has_more})
+            except (OSError, ValueError, KeyError, TypeError):
+                result.append({"store": name, "page": page, "error": True})
+    return sorted(result, key=lambda item: STORES.index(item["store"]))
+
 
 
 @lru_cache(maxsize=128)
@@ -269,6 +420,19 @@ class Handler(BaseHTTPRequestHandler):
             name, mime = assets[url.path]
             content_type = mime + "; charset=utf-8" if mime != "font/woff2" else mime
             self.send(200, content_type, (ROOT / "public" / name).read_bytes())
+            return
+        if url.path == "/api/promotions":
+            try:
+                params = parse_qs(url.query)
+                page = int(params.get("page", ["0"])[0])
+                store = params.get("store", [None])[0]
+                if not 0 <= page <= 100 or (store is not None and store not in STORES):
+                    raise ValueError("Invalid promotion page or store")
+            except (TypeError, ValueError):
+                self.send_json({"error": "Página o supermercado inválido."}, 400)
+                return
+            catalog = promotion_catalog(int(time.time() // 600), page, store)
+            self.send_json({"stores": catalog})
             return
         if url.path != "/api/search":
             self.send_json({"error": "Ruta desconocida."}, 404)
