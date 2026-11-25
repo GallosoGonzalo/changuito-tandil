@@ -10,9 +10,7 @@ let recommended = null;
 let basketRevision = 0;
 let groupsByTerm = [];
 let promotionCatalogEntries = [];
-let promotionPage = 0;
-let promotionHasMore = false;
-let promotionsLoading = false;
+const promotionsLoading = new Set();
 
 function readSaved(key, fallback) {
   try {
@@ -162,35 +160,13 @@ function renderResults() {
   }
 }
 
-function mergePromotionCatalog(incoming, page) {
-  if (page === 0) {
-    promotionCatalogEntries = incoming;
-    return;
-  }
+function setPromotionEntries(incoming) {
   for (const entry of incoming) {
-    const current = promotionCatalogEntries.find((item) => item.store === entry.store);
-    if (!current || !Array.isArray(entry.categories) || !Array.isArray(current.categories)) {
-      if (current) Object.assign(current, entry);
-      else promotionCatalogEntries.push(entry);
-      continue;
-    }
-    const categories = new Map(current.categories.map((category) => [category.name, category]));
-    for (const category of entry.categories) {
-      const existing = categories.get(category.name);
-      if (!existing) categories.set(category.name, category);
-      else {
-        const seen = new Set(existing.products.map((product) => product.id));
-        existing.products.push(...category.products.filter((product) => {
-          if (seen.has(product.id)) return false;
-          seen.add(product.id);
-          return true;
-        }));
-      }
-    }
-    current.categories = [...categories.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
-    current.hasMore = entry.hasMore;
-    delete current.error;
+    const index = promotionCatalogEntries.findIndex((current) => current.store === entry.store);
+    if (index === -1) promotionCatalogEntries.push(entry);
+    else promotionCatalogEntries[index] = entry;
   }
+  promotionCatalogEntries.sort((a, b) => stores.indexOf(a.store) - stores.indexOf(b.store));
 }
 
 function renderPromotionCatalog(catalog) {
@@ -198,84 +174,95 @@ function renderPromotionCatalog(catalog) {
   const status = find("#promotion-status");
   if (!root || !status) return;
   root.replaceChildren();
-  const storesWithResults = (catalog || []).filter((entry) => Array.isArray(entry.categories));
-  const failed = (catalog || []).filter((entry) => entry.error).map((entry) => entry.store);
-  if (!storesWithResults.length && !failed.length) {
-    status.textContent = "No pudimos cargar los folletos. Volvé a intentarlo más tarde.";
+  if (!catalog.length) {
+    status.textContent = "Cargando promociones…";
     return;
   }
+  const failed = catalog.filter((entry) => entry.error).map((entry) => entry.store);
   status.textContent = failed.length
-    ? "No se pudo cargar el catálogo de " + failed.join(", ") + "."
+    ? "No se pudo cargar " + failed.join(" y ") + ". Podés reintentar desde cada tienda."
     : "Promociones agrupadas por supermercado y categoría.";
-  for (const entry of storesWithResults) {
+
+  for (const entry of catalog) {
     const section = el("section", undefined, "promotion-store-section");
     section.append(el("h3", entry.store, "promotion-store-title"));
-    if (!entry.categories.length) {
-      section.append(el("p", "La tienda no informó promociones de productos en este tramo del catálogo.", "muted"));
-    }
-    for (const category of entry.categories) {
-      const group = el("section", undefined, "promotion-category");
-      group.append(el("h4", category.name + " (" + category.products.length + ")"));
-      const grid = el("div", undefined, "promotion-list");
-      for (const offer of category.products) {
-        const card = el("article", undefined, "promotion-card");
-        card.append(el("h5", offer.name));
-        card.append(el("strong", "Precio publicado: " + fmt(offer.price), "promotion-price"));
-        const tags = el("ul", undefined, "promotion-tags");
-        for (const label of offer.promos) tags.append(el("li", label));
-        card.append(tags);
-        const link = el("a", "Ver producto en la tienda");
-        link.href = offer.link;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        card.append(link);
-        grid.append(card);
+    if (entry.error) {
+      section.append(el("p", "No pudimos cargar esta página de promociones.", "muted"));
+    } else if (!entry.categories.length) {
+      section.append(el("p", "No encontramos promociones en esta página del catálogo.", "muted"));
+    } else {
+      for (const category of entry.categories) {
+        const group = el("section", undefined, "promotion-category");
+        group.append(el("h4", category.name + " (" + category.products.length + ")"));
+        const grid = el("div", undefined, "promotion-list");
+        for (const offer of category.products) {
+          const card = el("article", undefined, "promotion-card");
+          card.append(el("h5", offer.name));
+          card.append(el("strong", "Precio publicado: " + fmt(offer.price), "promotion-price"));
+          const tags = el("ul", undefined, "promotion-tags");
+          for (const label of offer.promos) tags.append(el("li", label));
+          card.append(tags);
+          const link = el("a", "Ver producto en la tienda");
+          link.href = offer.link;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          card.append(link);
+          grid.append(card);
+        }
+        group.append(grid);
+        section.append(group);
       }
-      group.append(grid);
-      section.append(group);
     }
-    root.append(section);
-  }
-  for (const store of failed) {
-    const section = el("section", undefined, "promotion-store-section");
-    section.append(el("h3", store, "promotion-store-title"));
-    const message = store === "Carrefour"
-      ? "No pudimos leer el catálogo online de promociones de Carrefour."
-      : "No pudimos cargar el catálogo de promociones.";
-    section.append(el("p", message, "muted"));
+
+    const pagination = el("div", undefined, "promotion-pagination");
+    const page = Number.isInteger(entry.page) ? entry.page : 0;
+    const loading = promotionsLoading.has(entry.store);
+    if (entry.error) {
+      const retry = button("Reintentar", () => loadPromotionCatalog(entry.store, page));
+      retry.disabled = loading;
+      pagination.append(retry);
+    }
+    const previous = button("Anterior", () => loadPromotionCatalog(entry.store, page - 1));
+    previous.disabled = loading || page === 0;
+    previous.setAttribute("aria-label", "Ver página anterior de " + entry.store);
+    pagination.append(previous);
+    pagination.append(el("span", "Página " + (page + 1), "promotion-page-label"));
+    const next = button("Siguiente", () => loadPromotionCatalog(entry.store, page + 1));
+    next.disabled = loading || entry.error || !entry.hasMore;
+    next.setAttribute("aria-label", "Ver página siguiente de " + entry.store);
+    pagination.append(next);
+    section.append(pagination);
     root.append(section);
   }
 }
 
-async function loadPromotionCatalog(page = 0) {
+async function loadPromotionCatalog(store = null, page = 0) {
   const status = find("#promotion-status");
-  const loadButton = find("#more-promotions");
-  if (!status || promotionsLoading) return;
-  promotionsLoading = true;
-  if (page === 0) status.textContent = "Cargando promociones…";
-  else status.textContent = "Cargando más promociones de Carrefour…";
-  loadButton.disabled = true;
-  try {
-    const suffix = page ? "?page=" + page : "";
-    const response = await fetch("/api/promotions" + suffix, {signal: AbortSignal.timeout(45000)});
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Error al cargar promociones");
-    mergePromotionCatalog(data.stores || [], page);
-    promotionPage = page;
-    const carrefour = (data.stores || []).find((entry) => entry.store === "Carrefour");
-    promotionHasMore = Boolean(carrefour?.hasMore);
-    renderPromotionCatalog(promotionCatalogEntries);
-  } catch {
-    if (page === 0) status.textContent = "No pudimos cargar los folletos. Volvé a intentarlo más tarde.";
-    else status.textContent = "No pudimos cargar más ofertas. Podés intentarlo de nuevo.";
-  } finally {
-    promotionsLoading = false;
-    loadButton.hidden = !promotionHasMore;
-    loadButton.disabled = false;
-  }
+  const targets = store ? [store] : stores;
+  const requested = targets.filter((name) => !promotionsLoading.has(name));
+  if (!status || !requested.length) return;
+  for (const name of requested) promotionsLoading.add(name);
+  if (!promotionCatalogEntries.length) status.textContent = "Cargando promociones…";
+  renderPromotionCatalog(promotionCatalogEntries);
+
+  const responses = await Promise.all(requested.map(async (name) => {
+    try {
+      const query = new URLSearchParams({store: name, page: String(page)});
+      const response = await fetch("/api/promotions?" + query, {signal: AbortSignal.timeout(25000)});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Error al cargar promociones");
+      const entry = (data.stores || []).find((item) => item.store === name);
+      if (!entry) throw new Error("Respuesta sin catálogo");
+      return entry;
+    } catch {
+      return {store: name, page, error: true};
+    }
+  }));
+  setPromotionEntries(responses);
+  for (const name of requested) promotionsLoading.delete(name);
+  renderPromotionCatalog(promotionCatalogEntries);
 }
 
-find("#more-promotions")?.addEventListener("click", () => loadPromotionCatalog(promotionPage + 1));
 
 function resetQuote() {
   basketRevision++;
