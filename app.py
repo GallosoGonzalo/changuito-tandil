@@ -80,10 +80,10 @@ def carrefour_products(data):
     for product in data["products"]:
         for item in product.get("items") or []:
             offers = [{**(seller.get("commertialOffer") or {}), "seller": str(seller["sellerId"])} for seller in item.get("sellers") or []]
-            offers = [offer for offer in offers if offer.get("AvailableQuantity", 0) > 0 and (cents(offer.get("Price")) or 0) > 0]
+            offers = [offer for offer in offers if (cents(offer.get("Price")) or 0) > 0]
             if not offers:
                 continue
-            offer = min(offers, key=lambda entry: cents(entry["Price"]))
+            offer = min(offers, key=lambda entry: (entry.get("AvailableQuantity", 0) <= 0, cents(entry["Price"])))
             price = cents(offer["Price"])
             promos = []
             regular = cents(offer.get("ListPrice"))
@@ -178,32 +178,60 @@ def promotion_catalog(cache_window):
     return sorted(result, key=lambda item: STORES.index(item["store"]))
 
 
+def carrefour_search_terms(query):
+    normalized = re.sub(r"\s+", " ", query.casefold()).strip()
+    terms = [normalized]
+    spaced_units = re.sub(r"(?<=\d)(kg|gr?|lt|ml)\b", r" \1", normalized)
+    without_size = re.sub(r"\b\d+(?:[.,]\d+)?\s?(?:kg|gr?|lt|ml|unidades?)\b", "", spaced_units)
+    without_size = re.sub(r"\s+", " ", without_size).strip()
+    for term in (spaced_units, without_size):
+        if term and term not in terms:
+            terms.append(term)
+    return terms[:3]
+
+
+def fetch_carrefour_query(query, headers):
+    intelligent = "https://www.carrefour.com.ar/api/io/_v/api/intelligent-search/product_search?" + urlencode(
+        {"count": 16, "query": query}, quote_via=quote
+    )
+    with urlopen(Request(intelligent, headers=headers), timeout=8) as response:
+        products = list(carrefour_products(json.load(response)))
+    if products:
+        return products
+    legacy = "https://www.carrefour.com.ar/api/catalog_system/pub/products/search?" + urlencode(
+        {"ft": query}, quote_via=quote
+    )
+    with urlopen(Request(legacy, headers=headers), timeout=8) as response:
+        return list(carrefour_products({"products": json.load(response)}))
+
+
 @lru_cache(maxsize=128)
 def search_store(store, query, cache_window):
+    headers = {"User-Agent": "curl/8.5.0", "Accept": "*/*"}
     if store == "Monarca":
         url = "https://api.monarcadigital.com.ar/products/search?" + urlencode({"page": 0, "size": 16, "query": query})
-        parse = monarca_products
-    else:
-        url = "https://www.carrefour.com.ar/api/io/_v/api/intelligent-search/product_search?" + urlencode({"count": 16, "query": query}, quote_via=quote)
-        parse = carrefour_products
-    headers = {"User-Agent": "curl/8.5.0", "Accept": "*/*"}
-    with urlopen(Request(url, headers=headers), timeout=8) as response:
-        products = list(parse(json.load(response)))
-    if store == "Monarca":
+        with urlopen(Request(url, headers=headers), timeout=8) as response:
+            products = list(monarca_products(json.load(response)))
         seen = {product["id"] for product in products}
-        terms = monarca_search_terms(query)
-        for term in terms:
+        for term in monarca_search_terms(query):
             alternate_url = "https://api.monarcadigital.com.ar/products/search?" + urlencode({"page": 0, "size": 16, "query": term})
             with urlopen(Request(alternate_url, headers=headers), timeout=8) as response:
                 for product in monarca_products(json.load(response)):
                     if product["id"] not in seen:
                         products.append(product)
                         seen.add(product["id"])
-    if store == "Carrefour" and not products:
-        # Intelligent Search sometimes returns zero hits for broad terms such as "azucar".
-        fallback = "https://www.carrefour.com.ar/api/catalog_system/pub/products/search?" + urlencode({"ft": query}, quote_via=quote)
-        with urlopen(Request(fallback, headers=headers), timeout=8) as response:
-            products = list(carrefour_products({"products": json.load(response)}))
+        return products
+
+    products = []
+    seen = set()
+    for term in carrefour_search_terms(query):
+        for product in fetch_carrefour_query(term, headers):
+            key = product["id"] + ":" + product.get("seller", "")
+            if key not in seen:
+                products.append(product)
+                seen.add(key)
+        if products and len(seen) >= 16:
+            break
     return products
 
 
