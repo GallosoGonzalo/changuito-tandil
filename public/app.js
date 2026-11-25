@@ -165,7 +165,7 @@ function renderPromotionCatalog(catalog) {
   root.replaceChildren();
   const storesWithResults = (catalog || []).filter((entry) => Array.isArray(entry.categories));
   const failed = (catalog || []).filter((entry) => entry.error).map((entry) => entry.store);
-  if (!storesWithResults.length) {
+  if (!storesWithResults.length && !failed.length) {
     status.textContent = "No pudimos cargar los folletos. Volvé a intentarlo más tarde.";
     return;
   }
