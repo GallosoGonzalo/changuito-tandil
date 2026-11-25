@@ -55,6 +55,39 @@ function button(label, action, className) {
   return node;
 }
 
+const promoDate = new Intl.DateTimeFormat("es-AR", {
+  day: "2-digit", month: "2-digit", timeZone: "America/Argentina/Buenos_Aires",
+});
+
+function shortPromo(label, expires) {
+  const second = label.match(/\b(?:2\s*[.º°]?\s*(?:do|da)?|segund[ao])\s*(?:unidad\s*)?(?:al|con)\s*(\d+)\s*%/i);
+  const multi = label.match(/\b(\d+)\s*[x×]\s*(\d+)\b/i);
+  const percent = label.match(/\b(\d+)\s*%/);
+  const discount = second ? "2ª unidad al " + second[1] + "%"
+    : multi ? multi[1] + "×" + multi[2]
+    : percent ? percent[1] + "% de descuento" : "";
+  if (!discount) return "Ver promoción";
+  const range = label.match(/\b(\d{1,2})\s+(?:al|a)\s+(\d{1,2}\/\d{1,2})(?!\d)/i);
+  const dates = label.match(/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g) || [];
+  const weekday = label.match(/\b(?:lunes|martes|miércoles|jueves|viernes|sábado|domingo)(?:s)?\b/i);
+  const validity = Number.isFinite(expires) && expires > 0 ? "Hasta el " + promoDate.format(expires)
+    : range ? range[1] + "/" + range[2].split("/")[1] + " al " + range[2]
+    : dates.length >= 2 ? dates[0] + " al " + dates[1]
+    : dates.length === 1 ? (/\bhasta\b/i.test(label) ? "Hasta el " : "") + dates[0]
+    : weekday?.[0];
+  return validity ? discount + " · " + validity : discount;
+}
+
+function promoBadge(tag, label, expires) {
+  const badge = el("details", undefined, "promo");
+  badge.append(el("summary", shortPromo(label, expires)), el("div", label));
+  const summary = badge.firstElementChild;
+  summary.setAttribute("aria-label", summary.textContent + ". Ver condiciones");
+  const wrapper = el(tag);
+  wrapper.append(badge);
+  return wrapper;
+}
+
 function productKey(product) {
   return product.ean || (product.store + ":" + product.id);
 }
@@ -138,8 +171,8 @@ function renderResults() {
         const estimated = priceFor(offer, 1);
         line.append(el("span", offer.store, "offer-store"), el("strong", fmt(estimated.total), "offer-price"));
         if (estimated.total < offer.price) line.append(el("small", "Precio regular: " + fmt(offer.price)));
-        const promos = [...new Set(offer.promos.map((promo) => promo.label).filter(Boolean))];
-        if (promos.length) line.append(el("div", promos.join(" · "), "promo"));
+        const promos = new Map(offer.promos.filter((promo) => promo.label).map((promo) => [promo.label, promo]));
+        for (const promo of promos.values()) line.append(promoBadge("div", promo.label, promo.expires));
         const pair = priceFor(offer, 2);
         if (offer.promos.some((promo) => promo.estimated && promo.group === 2) && pair.total < estimated.total * 2) {
           line.append(el("div", "2 unidades por " + fmt(pair.total) + " · estimado", "promo"));
@@ -242,7 +275,7 @@ function renderPromotionCatalog(catalog) {
           card.append(el("h5", offer.name));
           card.append(el("strong", "Precio publicado: " + fmt(offer.price), "promotion-price"));
           const tags = el("ul", undefined, "promotion-tags");
-          for (const label of offer.promos) tags.append(el("li", label));
+          for (const label of offer.promos) tags.append(promoBadge("li", label));
           card.append(tags);
           const link = el("a", "Ver producto en la tienda");
           link.href = offer.link;
@@ -356,7 +389,7 @@ function renderBasket() {
       price.append(el("span", "Subtotal"), el("strong", fmt(line.total)));
       title.append(name, price);
       row.append(title);
-      if (line.promo) row.append(el("div", line.promo, "promo"));
+      if (line.promo) row.append(promoBadge("div", line.promo));
       const controls = el("div", undefined, "controls");
       const minus = button("−", () => changeQuantity(line.key, -1));
       minus.setAttribute("aria-label", "Quitar una unidad de " + line.product.name);
