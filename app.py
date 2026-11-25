@@ -43,9 +43,14 @@ def monarca_promo(promo):
     kind = promo.get("type")
     group = max(1, quantity or 0) if kind == "PERCENTAGE_OFF" else quantity
     expires = active(promo)
-    if expires is None or promo.get("weekDays") or kind not in {"PERCENTAGE_OFF", "PERCENTAGE_N_OFF", "NXM"}:
+    # Keep weekday/card-limited campaigns visible in the brochure. The
+    # comparator only applies a promo price when its mechanics are verified.
+    if expires is None or kind not in {"PERCENTAGE_OFF", "PERCENTAGE_N_OFF", "NXM"}:
         price = None
-    return {"label": label, "group": group, "price": price, "card": False, "expires": expires}
+    return {
+        "label": label, "group": group, "price": price, "card": False,
+        "expires": expires, "weekDays": promo.get("weekDays") or [],
+    }
 
 
 def barcode(value):
@@ -137,7 +142,7 @@ def monarca_promotions():
             if not product:
                 continue
             labels = [promo["label"] for promo in product["promos"]
-                      if promo.get("label") and promo.get("expires")]
+                      if promo.get("label")]
             if not labels:
                 continue
             category = raw.get("category") or {}
