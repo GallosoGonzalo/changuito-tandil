@@ -28,7 +28,7 @@
       <a class="wordmark" href="#inicio" aria-label="Changuito Tandil, inicio"><span class="brand-icon"><svg class="icon" aria-hidden="true"><use href="#i-basket"/></svg></span>Changuito</a>
       <span class="location"><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg>Tandil, Buenos Aires</span>
       <nav aria-label="En esta página">
-        <a class="benefits-link" href="#beneficios">Beneficios</a>
+        <a class="promos-link" href="#promos">Promos</a>
         <a class="basket-link" href="#compra"><svg class="icon" aria-hidden="true"><use href="#i-basket"/></svg>Tu compra <span id="nav-count" aria-hidden="true">0</span></a>
       </nav>
     </div>
@@ -78,29 +78,15 @@
       </aside>
     </div>
 
-    <section class="payment" id="beneficios" tabindex="-1" aria-labelledby="benefits-title">
-      <div class="payment-heading"><span class="calendar-mark"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg></span><h2 id="benefits-title">Calendario de beneficios</h2></div>
-      <p class="muted">Agregá las promos a domicilio que podés usar. Para un día futuro se proyecta con los precios y envíos cotizados hoy.</p>
-      <div id="benefit-list"></div>
-      <details>
-        <summary id="add-benefit">Agregar beneficio</summary>
-        <form id="benefit-form">
-          <label>Medio de pago <input name="name" placeholder="Banco, tarjeta o billetera" maxlength="90" required></label>
-          <label>Supermercado <select name="store"><option>Monarca</option><option>Carrefour</option></select></label>
-          <label>Día de la semana <select name="day"><option value="">Todos</option><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option><option value="0">Domingo</option></select></label>
-          <label>Tipo <select name="kind"><option value="refund">Reintegro</option><option value="discount">Descuento inmediato</option></select></label>
-          <label>Desde <input name="start" type="date" required></label>
-          <label>Hasta <input name="end" type="date" required></label>
-          <label>Porcentaje <input name="percent" type="number" min="0.01" max="100" step="0.01" required></label>
-          <label>Compra mínima ($) <input name="minimum" type="number" min="0" step="0.01" placeholder="Sin mínimo"></label>
-          <label>Tope disponible ($) <input name="cap" type="number" min="0" step="0.01" placeholder="Sin tope"></label>
-          <label class="preference"><input name="stack" type="checkbox"> Acumula con promos de productos</label>
-          <p class="muted benefit-help">Cargá el tope que te queda del período y solo beneficios válidos para todo el pedido a domicilio.</p>
-          <button>Guardar beneficio</button>
-          <p class="muted" id="benefit-status" role="status"></p>
-        </form>
-      </details>
-      <p class="conditions">Consultá las condiciones de <a href="https://monarcadigital.com.ar/bases-y-condiciones" target="_blank" rel="noopener">Monarca</a> y <a href="https://www.carrefour.com.ar/ofertas/" target="_blank" rel="noopener">Carrefour</a>.</p>
+    <section class="promotions-section" id="promos" tabindex="-1" aria-labelledby="promotions-title">
+      <div class="promotions-heading">
+        <span class="promotions-kicker">OFERTAS DEL CATÁLOGO</span>
+        <h2 id="promotions-title">Productos en promo</h2>
+      </div>
+      <p class="muted">Promociones que informan Carrefour y Monarca para los productos que buscaste. Revisá condiciones y vigencia en la tienda.</p>
+      <div id="promotion-list" class="promotion-list" aria-live="polite">
+        <p class="muted">Buscá productos para ver las ofertas disponibles.</p>
+      </div>
     </section>
   </main>
 </body>

@@ -156,6 +156,48 @@ function renderResults() {
       results.append(row);
     }
   }
+  renderPromotionCatalog();
+}
+
+function renderPromotionCatalog() {
+  const list = find("#promotion-list");
+  if (!list) return;
+  list.replaceChildren();
+  const entries = [];
+  const seen = new Set();
+  for (const {groups} of groupsByTerm) {
+    for (const [key, offers] of groups) {
+      for (const offer of offers) {
+        const labels = [...new Set((offer.promos || []).map((promo) => promo.label).filter(Boolean))];
+        if (!labels.length) continue;
+        const unique = offer.store + ":" + offer.id + ":" + labels.join("|");
+        if (seen.has(unique)) continue;
+        seen.add(unique);
+        entries.push({key, offer, labels});
+      }
+    }
+  }
+  if (!entries.length) {
+    list.append(el("p", groupsByTerm.length
+      ? "No encontramos promociones en estos resultados. Probá otra búsqueda."
+      : "Buscá productos para ver las ofertas disponibles.", "muted"));
+    return;
+  }
+  for (const {offer, labels} of entries) {
+    const card = el("article", undefined, "promotion-card");
+    card.append(el("span", offer.store, "promotion-store"));
+    card.append(el("h3", offer.name));
+    card.append(el("strong", "Precio publicado: " + fmt(offer.price), "promotion-price"));
+    const tags = el("ul", undefined, "promotion-tags");
+    for (const label of labels) tags.append(el("li", label));
+    card.append(tags);
+    const link = el("a", "Ver producto en la tienda");
+    link.href = offer.link;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    card.append(link);
+    list.append(card);
+  }
 }
 
 function resetQuote() {
@@ -183,8 +225,8 @@ function renderBasket() {
   find("#nav-count").textContent = units;
   find(".basket-link").setAttribute("aria-label", "Tu compra: " + units + (units === 1 ? " unidad" : " unidades"));
   find("#basket-label").textContent = recommended ? "Costo final estimado" : "Subtotal de productos";
-  find("#basket-caption").textContent = recommended ? "Con envío y beneficios aplicables." :
-    basket.size ? "Antes de cotizar envío y beneficios." : "Agregá productos para cotizar tu lista.";
+  find("#basket-caption").textContent = recommended ? "Con envío cotizado; sin cupones ni beneficios bancarios." :
+    basket.size ? "Antes de cotizar el envío." : "Agregá productos para cotizar tu lista.";
   find("#quote").disabled = !basket.size || find("#quote").getAttribute("aria-busy") === "true";
   lists.replaceChildren();
   for (const [store, lines] of byStore) {

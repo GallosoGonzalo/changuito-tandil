@@ -14,7 +14,7 @@ Requiere Python 3.10 o superior e internet. Si querés abrirlo desde el celular 
 
 1. Escribí hasta seis búsquedas separadas por comas o tocá **Yerba**, **Leche** o **Detergente** para hacer una consulta al catálogo. Las sugerencias no son precios de muestra.
 2. Compará los precios de la misma presentación y elegí **Agregar**. **Tu compra**, en la barra superior, muestra la cantidad de unidades y te lleva a la lista. Podés sumar o quitar unidades y copiar la lista por supermercado.
-3. Si tenés un beneficio, cargalo en **Beneficios**. Elegí el día de compra y **Cotizar y comparar**. El subtotal del catálogo no es el importe final: cuando hay cotización se separan envío, pago y reintegro. Cambiá de alternativa para ver su desglose.
+3. Elegí el día de compra y **Cotizar y comparar**. El subtotal del catálogo no es el importe final: cuando hay cotización se separan el envío estimado y el costo final. Cambiá de alternativa para ver su desglose. Los cupones personales y beneficios bancarios no se incluyen en el cálculo.
 
 [Vista de escritorio](docs/capturas/escritorio.png) · [Vista móvil](docs/capturas/movil.png) · [Cambios y verificación visual](docs/CHANGELOG.md)
 
@@ -22,9 +22,9 @@ Requiere Python 3.10 o superior e internet. Si querés abrirlo desde el celular 
 
 - Agregá productos al changuito y elegí **Cotizar y comparar**. El código postal inicial es 7000. Carrefour se cotiza por SKU, vendedor y cantidad para ese código postal. La cotización usa el total por producto de la simulación y el precio de una franja de entrega común. Si no hay una franja con precio verificable o falta stock, esa opción queda fuera. Se usa el mínimo de compra publicado de $10.000 para la app Carrefour. Para Monarca se toma el envío bonificado publicado para Tandil.
 - Monarca calcula descuentos directos, segunda unidad y 3×2 cuando la API informa los datos necesarios. Carrefour muestra los descuentos incluidos por la simulación. Las promos informadas por catálogo se muestran como referencia.
-- En **Calendario de beneficios** cargá tarjetas o billeteras que usás, con la vigencia, día, porcentaje, mínimo, tope restante y acumulación. El cálculo aplica un beneficio por supermercado sobre el subtotal de productos. Cargá solo beneficios que correspondan al pedido a domicilio completo. El monto pagado y el reintegro aparecen por separado.
-- Podés elegir un día futuro para comparar beneficios con los precios y el envío de hoy. La app compara hasta cuatro repartos, incluyendo todo en un supermercado cuando hay oferta para todos los productos. El resultado es la mejor alternativa de las cotizadas.
-- La lista y tus beneficios se guardan en el navegador. Volvé a buscar para actualizar los precios de catálogo y cotizá antes de comprar. Confirmá la disponibilidad, el envío y las promociones en la app de cada supermercado.
+- La sección **Productos en promo** reúne las ofertas del catálogo para los productos encontrados en tus búsquedas. Abrí el enlace del producto para confirmar condiciones y vigencia en la tienda.
+- Podés elegir un día futuro para comparar promociones por producto con los precios y el envío cotizados hoy; la cotización no aplica beneficios bancarios. La app compara hasta cuatro repartos, incluyendo todo en un supermercado cuando hay oferta para todos los productos. El resultado es la mejor alternativa de las cotizadas.
+- La lista se guarda en el navegador. Volvé a buscar para actualizar los precios de catálogo y cotizá antes de comprar. Confirmá la disponibilidad, el envío y las promociones en la app de cada supermercado.
 
 ## Prueba de interfaz (opcional)
 
