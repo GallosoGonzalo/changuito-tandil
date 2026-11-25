@@ -268,7 +268,14 @@ main, #compra, #productos, #promos, #query { scroll-margin-top: 5.3rem; }
 .promotion-category { margin-top: 1rem; }
 .promotion-category h4 { font-size: 1.05rem; margin-bottom: .5rem; }
 .promotion-category h5 { font-size: 1rem; line-height: 1.35; }
-
+.promotion-card { overflow: hidden; }
+.promotion-image {
+  display: block;
+  width: 100%;
+  height: 10rem;
+  object-fit: contain;
+  align-self: center;
+}
 
 .promotion-pagination {
   display: flex;
