@@ -408,4 +408,11 @@ find("#search").addEventListener("submit", async (event) => {
 
 renderBasket();
 
-loadPromotionCatalog();
+const promotionDetails = find("#promos");
+promotionDetails?.addEventListener("toggle", () => {
+  if (promotionDetails.open && !promotionCatalogEntries.length) loadPromotionCatalog();
+});
+find(".promos-link")?.addEventListener("click", () => {
+  if (promotionDetails) promotionDetails.open = true;
+});
+if (promotionDetails && window.location.hash === "#promos") promotionDetails.open = true;
