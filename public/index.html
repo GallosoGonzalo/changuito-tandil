@@ -51,16 +51,6 @@
       </div>
     </header>
 
-    <section class="promotions-section" id="promos" tabindex="-1" aria-labelledby="promotions-title">
-      <div class="promotions-heading">
-        <span class="promotions-kicker">FOLLETO DIGITAL</span>
-        <h2 id="promotions-title">Promociones de los supermercados</h2>
-      </div>
-      <p class="muted">Ofertas agrupadas por supermercado y categoría. Navegá las páginas de cada tienda para mantener la carga liviana. Confirmá siempre el precio y las condiciones en la tienda.</p>
-      <div id="promotion-status" class="muted" role="status" aria-live="polite">Cargando promociones…</div>
-      <div id="promotion-stores"></div>
-    </section>
-
     <div class="layout">
       <section id="productos" aria-labelledby="results-title">
         <div class="heading section-heading"><h2 id="results-title">Productos</h2><span id="count"></span></div>
@@ -87,6 +77,19 @@
         <div id="scenarios"></div>
       </aside>
     </div>
+
+    <details class="promotions-section promotions-accordion" id="promos" aria-labelledby="promotions-title">
+      <summary class="promotions-summary">
+        <span class="promotions-kicker">FOLLETO DIGITAL</span>
+        <h2 id="promotions-title">Promociones de los supermercados</h2>
+        <span class="promotions-summary-action" aria-hidden="true">Ver promociones</span>
+      </summary>
+      <div class="promotions-content">
+        <p class="muted">Ofertas agrupadas por supermercado y categoría. Navegá las páginas de cada tienda para mantener la carga liviana. Confirmá siempre el precio y las condiciones en la tienda.</p>
+        <div id="promotion-status" class="muted" role="status" aria-live="polite">Abrí el folleto para cargar las promociones.</div>
+        <div id="promotion-stores"></div>
+      </div>
+    </details>
   </main>
 </body>
 </html>

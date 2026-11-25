@@ -287,3 +287,30 @@ main, #compra, #productos, #promos, #query { scroll-margin-top: 5.3rem; }
 .promotion-pagination button { min-height: 2.75rem; padding: 0.5rem 0.9rem; }
 .promotion-pagination button:disabled { opacity: 0.55; cursor: wait; }
 .promotion-page-label { color: var(--muted); font-size: 0.9rem; }
+
+
+/* Promos are optional and stay collapsed below the product comparison. */
+.promotions-accordion { margin-top: 2rem; }
+.promotions-summary {
+  display: flex;
+  align-items: center;
+  gap: .75rem 1rem;
+  flex-wrap: wrap;
+  cursor: pointer;
+  list-style: none;
+}
+.promotions-summary::-webkit-details-marker { display: none; }
+.promotions-summary h2 { font-size: 1.45rem; }
+.promotions-summary-action {
+  margin-left: auto;
+  color: var(--green);
+  font-size: .9rem;
+  font-weight: 700;
+}
+.promotions-summary-action::after { content: "  +"; }
+.promotions-accordion[open] .promotions-summary-action::after { content: "  −"; }
+.promotions-content { padding-top: .9rem; }
+@media (max-width: 34rem) {
+  .promotions-summary { align-items: flex-start; flex-direction: column; }
+  .promotions-summary-action { margin-left: 0; }
+}
