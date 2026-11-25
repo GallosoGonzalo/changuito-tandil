@@ -180,6 +180,19 @@ main, #compra, #productos, #beneficios, #query, #add-benefit { scroll-margin-top
 .plan-totals div { display: flex; justify-content: space-between; gap: .65rem; margin: .18rem 0; }
 .plan-totals dd { text-align: right; }
 .plan-final { font-weight: 700; padding-top: .35rem; }
+.promotions-section { padding-block: 1.6rem .4rem; border-top: 1px solid #bac3ad; scroll-margin-top: 5.3rem; }
+.promotions-heading { display: flex; flex-direction: column; gap: .2rem; }
+.promotions-kicker { color: var(--green); font-weight: 750; letter-spacing: .1em; font-size: .72rem; }
+.promotions-section h2 { font-size: 1.8rem; }
+.promotions-section > .muted { margin-top: .45rem; max-width: 70ch; }
+.promotion-list { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,15rem),1fr)); gap: .8rem; margin-top: 1rem; }
+.promotion-card { display: flex; flex-direction: column; align-items: start; gap: .45rem; padding: 1rem; border: 1px solid #d9dfc9; border-radius: .75rem; background: var(--paper); min-width: 0; }
+.promotion-store { color: var(--muted); font-size: .8rem; font-weight: 700; }
+.promotion-card h3 { font-size: 1rem; line-height: 1.35; overflow-wrap: anywhere; }
+.promotion-price { font-size: 1.08rem; }
+.promotion-tags { list-style: none; display: flex; flex-wrap: wrap; gap: .4rem; padding: 0; margin: .15rem 0; }
+.promotion-tags li { padding: .32rem .55rem; border-radius: 999px; color: #396036; background: #e8eddb; font-weight: 650; font-size: .82rem; line-height: 1.3; }
+.promotion-card a { margin-top: auto; padding-top: .35rem; font-weight: 650; }
 .payment { padding-block: 1.5rem .25rem; border-top: 1px solid #bac3ad; }
 .payment h2 { font-size: 1.75rem; }
 .calendar-mark { color: var(--green); background: #e6ebd8; border-radius: .6rem; padding: .54rem; display: inline-flex; }
