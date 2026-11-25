@@ -20,23 +20,46 @@ function savePlanning() {
   }
 }
 
-function showBenefits() {
+function displayDate(iso) {
+  return iso.split("-").reverse().join("/");
+}
+
+function showBenefits(focusIndex) {
   const list = find("#benefit-list");
   list.replaceChildren();
-  if (!benefits.length) list.append(el("p", "Todavía no cargaste beneficios.", "muted"));
+  if (!benefits.length) {
+    list.append(el("p", "Todavía no cargaste beneficios.", "muted"));
+    if (focusIndex !== undefined) find("#add-benefit").focus();
+    return;
+  }
+  const items = el("ul", undefined, "benefit-items");
   benefits.forEach((rule, index) => {
-    const line = el("div", undefined, "line heading");
+    const line = el("li", undefined, "benefit-item");
+    const details = el("div", undefined, "benefit-details");
     const day = rule.day === "" ? "Todos los días" : weekdays[Number(rule.day)];
-    const cap = rule.cap === null ? "sin tope cargado" : "tope " + fmt(rule.cap);
-    line.append(el("span", [rule.store, rule.name, day, rule.percent + "%", cap, rule.start + " a " + rule.end].join(" · ")));
-    line.append(button("Quitar", () => {
+    const type = rule.kind === "refund" ? "reintegro" : "descuento inmediato";
+    const cap = rule.cap === null ? "Sin tope cargado" : "Tope " + fmt(rule.cap);
+    const minimum = rule.minimum ? "Compra mínima " + fmt(rule.minimum) : "Sin mínimo";
+    details.append(
+      el("strong", rule.name + " · " + rule.store),
+      el("p", rule.percent + "% de " + type + " · " + day),
+      el("p", [displayDate(rule.start) + " al " + displayDate(rule.end), minimum, cap,
+        rule.stack ? "Acumula con promos" : "No acumula con promos"].join(" · "), "muted")
+    );
+    const remove = button("Quitar", () => {
       benefits.splice(index, 1);
       savePlanning();
-      showBenefits();
+      showBenefits(index);
       resetQuote();
-    }));
-    list.append(line);
+    }, "benefit-remove");
+    remove.setAttribute("aria-label", "Quitar beneficio " + (index + 1) + ": " + rule.name + " en " + rule.store);
+    line.append(details, remove);
+    items.append(line);
   });
+  list.append(items);
+  if (focusIndex !== undefined) {
+    items.children[Math.min(focusIndex, items.children.length - 1)].querySelector("button").focus();
+  }
 }
 
 benefitForm.addEventListener("submit", (event) => {
@@ -162,27 +185,43 @@ async function quotePlan(plan, postalCode, date, quoteCache) {
   return {...plan, lines, shipping, deliveryDate, ...summarize(lines, shipping, date)};
 }
 
-function showPlans(plans, chosen, date) {
+function showPlans(plans, chosen, date, keepFocus = false) {
   recommended = chosen;
   renderBasket();
   const section = find("#scenarios");
   section.replaceChildren();
+  const options = el("div", undefined, "plan-options");
+  options.setAttribute("role", "group");
+  options.setAttribute("aria-label", "Alternativas cotizadas");
   for (const plan of plans) {
-    const option = button(plan.name + " · " + fmt(plan.net), () => showPlans(plans, plan, date), "scenario");
+    const option = button(undefined, () => showPlans(plans, plan, date, true), "scenario");
+    option.append(el("span", plan.name, "scenario-name"), el("strong", fmt(plan.net), "scenario-price"));
+    if (plans.length > 1 && plan.net === plans[0].net) {
+      option.append(el("span", "Menor costo cotizado", "scenario-note"));
+    }
     option.setAttribute("aria-pressed", plan === chosen);
-    section.append(option);
+    option.setAttribute("aria-controls", "plan-breakdown");
+    options.append(option);
   }
-  const totals = el("div", undefined, "plan-totals");
-  totals.append(
-    el("p", "Día comparado: " + date.split("-").reverse().join("/")),
-    el("p", "Envío estimado: " + fmt(chosen.shipping)),
-    el("p", "Pagás al comprar: " + fmt(chosen.pay)),
-    el("p", "Recuperás después: " + fmt(chosen.refund)),
-    el("p", "Costo final estimado: " + fmt(chosen.net)),
-  );
-  if (chosen.deliveryDate) totals.append(el("p", "Carrefour cotizado para una franja del " + tandilDate.format(new Date(chosen.deliveryDate)) + ".", "muted"));
-  for (const rule of chosen.applied) totals.append(el("p", rule.store + " · " + rule.name + " · " + fmt(rule.amount), "promo"));
-  section.append(totals);
+  const breakdown = el("div");
+  breakdown.id = "plan-breakdown";
+  const totals = el("dl", undefined, "plan-totals");
+  for (const [label, value, className] of [
+    ["Día comparado", displayDate(date)],
+    ["Envío estimado", fmt(chosen.shipping)],
+    ["Pagás al comprar", fmt(chosen.pay)],
+    ["Recuperás después", fmt(chosen.refund)],
+    ["Costo final estimado", fmt(chosen.net), "plan-final"],
+  ]) {
+    const row = el("div", undefined, className);
+    row.append(el("dt", label), el("dd", value));
+    totals.append(row);
+  }
+  breakdown.append(totals);
+  if (chosen.deliveryDate) breakdown.append(el("p", "Carrefour cotizado para una franja del " + displayDate(tandilDate.format(new Date(chosen.deliveryDate))) + ".", "muted"));
+  for (const rule of chosen.applied) breakdown.append(el("p", rule.store + " · " + rule.name + " · " + fmt(rule.amount), "promo"));
+  section.append(options, breakdown);
+  if (keepFocus) options.querySelector('[aria-pressed="true"]').focus({preventScroll: true});
 }
 
 quoteButton.addEventListener("click", async () => {
@@ -197,6 +236,7 @@ quoteButton.addEventListener("click", async () => {
   const revision = basketRevision;
   const candidates = cartCandidates(date);
   const cache = new Map();
+  quoteButton.setAttribute("aria-busy", "true");
   quoteButton.disabled = true;
   quoteStatus.textContent = "Cotizando la compra a domicilio…";
   try {
@@ -209,7 +249,8 @@ quoteButton.addEventListener("click", async () => {
       : "No se pudo cotizar un reparto completo. Revisá el stock, el mínimo o el envío de Carrefour.";
     if (plans.length) showPlans(plans, plans[0], date);
   } finally {
-    quoteButton.disabled = false;
+    quoteButton.removeAttribute("aria-busy");
+    quoteButton.disabled = !basket.size;
   }
 });
 

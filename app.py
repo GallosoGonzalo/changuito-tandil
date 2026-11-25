@@ -257,10 +257,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         url = urlsplit(self.path)
-        assets = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"), "/planning.js": ("planning.js", "text/javascript"), "/style.css": ("style.css", "text/css")}
+        assets = {
+            "/": ("index.html", "text/html"),
+            "/app.js": ("app.js", "text/javascript"),
+            "/planning.js": ("planning.js", "text/javascript"),
+            "/style.css": ("style.css", "text/css"),
+            "/canasta.svg": ("canasta.svg", "image/svg+xml"),
+            "/fonts/bricolage-grotesque-latin.woff2": ("fonts/bricolage-grotesque-latin.woff2", "font/woff2"),
+        }
         if url.path in assets:
             name, mime = assets[url.path]
-            self.send(200, mime + "; charset=utf-8", (ROOT / "public" / name).read_bytes())
+            content_type = mime + "; charset=utf-8" if mime != "font/woff2" else mime
+            self.send(200, content_type, (ROOT / "public" / name).read_bytes())
             return
         if url.path != "/api/search":
             self.send_json({"error": "Ruta desconocida."}, 404)
