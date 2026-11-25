@@ -22,7 +22,7 @@ Requiere Python 3.10 o superior e internet. Si querés abrirlo desde el celular 
 
 - Agregá productos al changuito y elegí **Cotizar y comparar**. El código postal inicial es 7000. Carrefour se cotiza por SKU, vendedor y cantidad para ese código postal. La cotización usa el total por producto de la simulación y el precio de una franja de entrega común. Si no hay una franja con precio verificable o falta stock, esa opción queda fuera. Se usa el mínimo de compra publicado de $10.000 para la app Carrefour. Para Monarca se toma el envío bonificado publicado para Tandil.
 - Monarca calcula descuentos directos, segunda unidad y 3×2 cuando la API informa los datos necesarios. Carrefour muestra los descuentos incluidos por la simulación. Las promos informadas por catálogo se muestran como referencia.
-- La sección **Productos en promo** reúne las ofertas del catálogo para los productos encontrados en tus búsquedas. Abrí el enlace del producto para confirmar condiciones y vigencia en la tienda.
+- La sección **Promos** es independiente de la búsqueda y agrupa las ofertas por tienda y categoría cuando cada catálogo está disponible. Abrí el enlace del producto para confirmar condiciones y vigencia en la tienda.
 - Podés elegir un día futuro para comparar promociones por producto con los precios y el envío cotizados hoy; la cotización no aplica beneficios bancarios. La app compara hasta cuatro repartos, incluyendo todo en un supermercado cuando hay oferta para todos los productos. El resultado es la mejor alternativa de las cotizadas.
 - La lista se guarda en el navegador. Volvé a buscar para actualizar los precios de catálogo y cotizá antes de comprar. Confirmá la disponibilidad, el envío y las promociones en la app de cada supermercado.
 
