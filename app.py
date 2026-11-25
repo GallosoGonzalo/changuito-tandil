@@ -76,10 +76,14 @@ def monarca_products(data):
         }
 
 
-def carrefour_products(data):
+def carrefour_products(data, seller_id=None):
     for product in data["products"]:
         for item in product.get("items") or []:
-            offers = [{**(seller.get("commertialOffer") or {}), "seller": str(seller["sellerId"])} for seller in item.get("sellers") or []]
+            offers = [
+                {**(seller.get("commertialOffer") or {}), "seller": str(seller["sellerId"])}
+                for seller in item.get("sellers") or []
+                if seller_id is None or str(seller.get("sellerId")) == seller_id
+            ]
             offers = [offer for offer in offers if offer.get("AvailableQuantity", 0) > 0 and (cents(offer.get("Price")) or 0) > 0]
             if not offers:
                 continue
@@ -92,27 +96,48 @@ def carrefour_products(data):
             highlights = offer.get("discountHighlights") or offer.get("DiscountHighLight") or []
             for highlight in highlights:
                 promos.append({"label": highlight.get("name"), "price": None})
-            teasers = (offer.get("teasers") or offer.get("Teasers") or offer.get("PromotionTeasers")
-                       or product.get("promotionTeasers") or product.get("PromotionTeasers") or product.get("teasers") or [])
+            teasers = (offer.get("PromotionTeasers") or offer.get("promotionTeasers")
+                       or offer.get("teasers") or offer.get("Teasers")
+                       or product.get("PromotionTeasers") or product.get("promotionTeasers") or product.get("teasers") or [])
             for teaser in teasers:
-                label = teaser.get("name")
-                conditions = teaser.get("conditions") or {}
-                discount = (teaser.get("effects") or {}).get("parameters") or []
+                label = teaser.get("name") or teaser.get("Name") or teaser.get("<Name>k__BackingField")
+                conditions = (teaser.get("conditions") or teaser.get("Conditions")
+                              or teaser.get("<Conditions>k__BackingField") or {})
+                condition_parameters = (conditions.get("parameters") or conditions.get("Parameters")
+                                        or conditions.get("<Parameters>k__BackingField") or [])
+                minimum_quantity = (conditions.get("minimumQuantity") or conditions.get("MinimumQuantity")
+                                    or conditions.get("<MinimumQuantity>k__BackingField") or 0)
+                general_values = (teaser.get("generalValues") or teaser.get("GeneralValues")
+                                 or teaser.get("<GeneralValues>k__BackingField"))
+                effects = (teaser.get("effects") or teaser.get("Effects")
+                           or teaser.get("<Effects>k__BackingField") or {})
+                discount = (effects.get("parameters") or effects.get("Parameters")
+                            or effects.get("<Parameters>k__BackingField") or [])
+                def parameter_value(parameter, key):
+                    title = key.title()
+                    return (parameter.get(key) or parameter.get(title)
+                            or parameter.get("<" + title + ">k__BackingField"))
+                bins = {parameter_value(param, "name") for param in condition_parameters}
+                card_discount = [
+                    {"name": parameter_value(param, "name"), "value": parameter_value(param, "value")}
+                    for param in discount
+                ]
                 card = (
                     label == "Tarjeta Carrefour 15%"
-                    and {param.get("name") for param in (conditions.get("parameters") or [])} == {"RestrictionsBins"}
-                    and not teaser.get("generalValues")
-                    and not conditions.get("minimumQuantity")
-                    and discount == [{"name": "PercentualDiscount", "value": "15"}]
+                    and bins == {"RestrictionsBins"}
+                    and not general_values
+                    and not minimum_quantity
+                    and card_discount == [{"name": "PercentualDiscount", "value": "15"}]
                 )
                 promo = {"label": label, "price": (price * 85 + 50) // 100 if card else None, "group": 1, "card": card}
                 pair = re.match(r"^PROMO-2do al (\d+)%\s+Max (\d+) unidades\b", label or "", re.IGNORECASE)
-                params = {param.get("name"): param.get("value") for param in conditions.get("parameters") or []}
-                effect = next((param.get("value") for param in discount if param.get("name") == "PercentualDiscount"), None)
-                if pair and conditions.get("minimumQuantity") == 2 and set(params) == {"SkuIdsList"}:
+                params = {parameter_value(param, "name"): parameter_value(param, "value") for param in condition_parameters}
+                effect = next((parameter_value(param, "value") for param in discount
+                               if parameter_value(param, "name") == "PercentualDiscount"), None)
+                if pair and minimum_quantity == 2 and set(params) == {"SkuIdsList"}:
                     percent, limit = map(int, pair.groups())
                     if (
-                        0 < percent <= 100 and limit >= 2 and not teaser.get("generalValues")
+                        0 < percent <= 100 and limit >= 2 and not general_values
                         and str(item["itemId"]) in (params["SkuIdsList"] or "").split(",")
                         and len(discount) == 1 and cents(effect) == percent * 50
                     ):
@@ -218,7 +243,7 @@ def carrefour_promotions(page, cache_window):
     categories = {}
     seen = set()
     for raw_page in catalog_pages:
-        for product in carrefour_products({"products": raw_page}):
+        for product in carrefour_products({"products": raw_page}, seller_id="1"):
             labels = list(dict.fromkeys(
                 promo.get("label") + (" · condición a confirmar" if promo.get("estimated") else "")
                 for promo in product.get("promos") or [] if promo.get("label")
