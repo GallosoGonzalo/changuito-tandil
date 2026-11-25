@@ -19,12 +19,6 @@ function summarize(lines, shipping) {
   return {pay, refund: 0, net: pay};
 }
 
-function summarize(lines, shipping) {
-  const products = lines.reduce((sum, line) => sum + line.total, 0);
-  const pay = products + shipping;
-  return {pay, refund: 0, net: pay};
-}
-
 function cartCandidates(date) {
   const entries = [...basket];
   const at = date === today() ? Date.now() : Date.parse(date + "T12:00:00-03:00");
