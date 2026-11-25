@@ -163,38 +163,33 @@ def carrefour_products(data, seller_id=None):
             }
 
 
-def monarca_promotions():
+PROMOTION_PAGE_SIZE = 100
+CARREFOUR_PROMOTION_PAGE_SIZE = 50
+
+
+@lru_cache(maxsize=256)
+def monarca_promotions(page, cache_window):
     headers = {"User-Agent": "curl/8.5.0", "Accept": "*/*"}
-    # The empty query returns the full online catalog in pages. Keep products
-    # with a currently active promotion and group by their returned category.
+    url = "https://api.monarcadigital.com.ar/products/search?" + urlencode({
+        "page": page, "size": PROMOTION_PAGE_SIZE, "query": "",
+    })
+    with urlopen(Request(url, headers=headers), timeout=15) as response:
+        data = json.load(response)
+    product_data = data.get("products") or {}
     categories = {}
-    page = 0
-    while True:
-        url = "https://api.monarcadigital.com.ar/products/search?" + urlencode({
-            "page": page, "size": 100, "query": "",
-        })
-        with urlopen(Request(url, headers=headers), timeout=15) as response:
-            data = json.load(response)
-        product_data = data.get("products") or {}
-        content = product_data.get("content") or []
-        for raw in content:
-            product = next(monarca_products({"products": {"content": [raw]}}), None)
-            if not product:
-                continue
-            labels = [promo["label"] for promo in product["promos"]
-                      if promo.get("label")]
-            if not labels:
-                continue
-            category = raw.get("category") or {}
-            name = category.get("description") or category.get("name") or "Otros"
-            categories.setdefault(name, []).append({**product, "promos": labels})
-        total_pages = (product_data.get("totalPages") or 1)
-        page += 1
-        if page >= total_pages:
-            break
-        if page >= 500:
-            raise ValueError("Catálogo Monarca supera el máximo de páginas")
-    return [{"name": name, "products": items} for name, items in sorted(categories.items())]
+    for raw in product_data.get("content") or []:
+        product = next(monarca_products({"products": {"content": [raw]}}), None)
+        if not product:
+            continue
+        labels = [promo["label"] for promo in product["promos"] if promo.get("label")]
+        if not labels:
+            continue
+        category = raw.get("category") or {}
+        name = category.get("description") or category.get("name") or "Otros"
+        categories.setdefault(name, []).append({**product, "promos": labels})
+    total_pages = int(product_data.get("totalPages") or 1)
+    has_more = page + 1 < total_pages
+    return [{"name": name, "products": items} for name, items in sorted(categories.items())], has_more
 
 def _carrefour_category(product):
     paths = product.get("categories") or []
@@ -218,63 +213,58 @@ def _carrefour_category(product):
     return "Otros"
 
 
-@lru_cache(maxsize=96)
+@lru_cache(maxsize=256)
 def carrefour_promotions(page, cache_window):
-    # Read four catalog pages ordered by discount. The client can request the
-    # next batch without keeping a serverless function open for a full scan.
+    # Read one catalog page at a time so the initial request stays small.
     def fetch_catalog_page(catalog_page):
-        start = catalog_page * 50
+        start = catalog_page * CARREFOUR_PROMOTION_PAGE_SIZE
         headers = {"User-Agent": "curl/8.5.0", "Accept": "*/*"}
-        params = {"O": "OrderByBestDiscountDESC", "_from": start, "_to": start + 49}
+        params = {"O": "OrderByBestDiscountDESC", "_from": start, "_to": start + CARREFOUR_PROMOTION_PAGE_SIZE - 1}
         url = "https://www.carrefour.com.ar/api/catalog_system/pub/products/search?" + urlencode(params)
         try:
             with urlopen(Request(url, headers=headers), timeout=8) as response:
                 return json.load(response)
         except OSError:
             fallback = "https://www.carrefour.com.ar/api/catalog_system/pub/products/search?" + urlencode(
-                {"_from": start, "_to": start + 49}
+                {"_from": start, "_to": start + CARREFOUR_PROMOTION_PAGE_SIZE - 1}
             )
             with urlopen(Request(fallback, headers=headers), timeout=8) as response:
                 return json.load(response)
 
-    pages = range(page * 4, page * 4 + 4)
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        catalog_pages = list(pool.map(fetch_catalog_page, pages))
+    catalog_page = fetch_catalog_page(page)
     categories = {}
     seen = set()
-    for raw_page in catalog_pages:
-        for product in carrefour_products({"products": raw_page}, seller_id="1"):
-            labels = list(dict.fromkeys(
-                promo.get("label") + (" · condición a confirmar" if promo.get("estimated") else "")
-                for promo in product.get("promos") or [] if promo.get("label")
-            ))
-            if not labels or product["id"] in seen:
-                continue
-            seen.add(product["id"])
-            product["promos"] = labels
-            category = _carrefour_category(product)
-            categories.setdefault(category, []).append(product)
-    has_more = all(len(catalog_page) == 50 for catalog_page in catalog_pages)
+    for product in carrefour_products({"products": catalog_page}, seller_id="1"):
+        labels = list(dict.fromkeys(
+            promo.get("label") + (" · condición a confirmar" if promo.get("estimated") else "")
+            for promo in product.get("promos") or [] if promo.get("label")
+        ))
+        if not labels or product["id"] in seen:
+            continue
+        seen.add(product["id"])
+        product["promos"] = labels
+        category = _carrefour_category(product)
+        categories.setdefault(category, []).append(product)
+    has_more = len(catalog_page) == CARREFOUR_PROMOTION_PAGE_SIZE
     return [{"name": name, "products": items} for name, items in sorted(categories.items())], has_more
 
-@lru_cache(maxsize=24)
-def promotion_catalog(cache_window, carrefour_page=0):
-    jobs = {"Carrefour": lambda: carrefour_promotions(carrefour_page, cache_window)}
-    if carrefour_page == 0:
-        jobs["Monarca"] = monarca_promotions
+@lru_cache(maxsize=512)
+def promotion_catalog(cache_window, page=0, store=None):
+    selected = (store,) if store else STORES
+    jobs = {
+        "Monarca": lambda: monarca_promotions(page, cache_window),
+        "Carrefour": lambda: carrefour_promotions(page, cache_window),
+    }
     result = []
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        tasks = {pool.submit(fetcher): store for store, fetcher in jobs.items()}
+    with ThreadPoolExecutor(max_workers=len(selected)) as pool:
+        tasks = {pool.submit(jobs[name]): name for name in selected}
         for task in as_completed(tasks):
-            store = tasks[task]
+            name = tasks[task]
             try:
-                categories, *paging = task.result() if store == "Carrefour" else (task.result(),)
-                entry = {"store": store, "categories": categories}
-                if store == "Carrefour":
-                    entry["hasMore"] = paging[0]
-                result.append(entry)
+                categories, has_more = task.result()
+                result.append({"store": name, "page": page, "categories": categories, "hasMore": has_more})
             except (OSError, ValueError, KeyError, TypeError):
-                result.append({"store": store, "error": True})
+                result.append({"store": name, "page": page, "error": True})
     return sorted(result, key=lambda item: STORES.index(item["store"]))
 
 
@@ -433,13 +423,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         if url.path == "/api/promotions":
             try:
-                page = int(parse_qs(url.query).get("page", ["0"])[0])
-                if not 0 <= page <= 100:
-                    raise ValueError("Invalid page")
+                params = parse_qs(url.query)
+                page = int(params.get("page", ["0"])[0])
+                store = params.get("store", [None])[0]
+                if not 0 <= page <= 100 or (store is not None and store not in STORES):
+                    raise ValueError("Invalid promotion page or store")
             except (TypeError, ValueError):
-                self.send_json({"error": "Página de promociones inválida."}, 400)
+                self.send_json({"error": "Página o supermercado inválido."}, 400)
                 return
-            catalog = promotion_catalog(int(time.time() // 600), page)
+            catalog = promotion_catalog(int(time.time() // 600), page, store)
             self.send_json({"stores": catalog})
             return
         if url.path != "/api/search":
