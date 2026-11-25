@@ -170,7 +170,7 @@ function renderPromotionCatalog(catalog) {
     return;
   }
   status.textContent = failed.length
-    ? "Catálogos disponibles: " + storesWithResults.map((entry) => entry.store).join(", ") + ". No se pudo cargar: " + failed.join(", ") + "."
+    ? "No se pudo cargar el catálogo de " + failed.join(", ") + "."
     : "Promociones agrupadas por supermercado y categoría.";
   for (const entry of storesWithResults) {
     const section = el("section", undefined, "promotion-store-section");
@@ -201,6 +201,16 @@ function renderPromotionCatalog(catalog) {
     }
     root.append(section);
   }
+  for (const store of failed) {
+    const section = el("section", undefined, "promotion-store-section");
+    section.append(el("h3", store, "promotion-store-title"));
+    const message = store === "Carrefour"
+      ? "El catálogo completo de promociones de Carrefour no está disponible ahora."
+      : "No pudimos cargar el catálogo de promociones.";
+    section.append(el("p", message, "muted"));
+    root.append(section);
+  }
+
 }
 
 async function loadPromotionCatalog() {
