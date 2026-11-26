@@ -171,11 +171,12 @@ function renderResults() {
         const estimated = priceFor(offer, 1);
         line.append(el("span", offer.store, "offer-store"), el("strong", fmt(estimated.total), "offer-price"));
         if (estimated.total < offer.price) line.append(el("small", "Precio regular: " + fmt(offer.price)));
-        const promos = new Map(offer.promos.filter((promo) => promo.label).map((promo) => [promo.label, promo]));
-        for (const promo of promos.values()) line.append(promoBadge("div", promo.label, promo.expires));
         const pair = priceFor(offer, 2);
-        if (offer.promos.some((promo) => promo.estimated && promo.group === 2) && pair.total < estimated.total * 2) {
+        if (pair.promo && pair.total < estimated.total * 2) {
+          line.append(promoBadge("div", pair.promo));
           line.append(el("div", "2 unidades por " + fmt(pair.total) + " · estimado", "promo"));
+        } else if (estimated.promo) {
+          line.append(promoBadge("div", estimated.promo));
         }
         prices.append(line);
       }
