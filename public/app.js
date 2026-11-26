@@ -55,6 +55,39 @@ function button(label, action, className) {
   return node;
 }
 
+const promoDate = new Intl.DateTimeFormat("es-AR", {
+  day: "2-digit", month: "2-digit", timeZone: "America/Argentina/Buenos_Aires",
+});
+
+function shortPromo(label, expires) {
+  const second = label.match(/\b(?:2\s*[.º°]?\s*(?:do|da)?|segund[ao])\s*(?:unidad\s*)?(?:al|con)\s*(\d+)\s*%/i);
+  const multi = label.match(/\b(\d+)\s*[x×]\s*(\d+)\b/i);
+  const percent = label.match(/\b(\d+)\s*%/);
+  const discount = second ? "2ª unidad al " + second[1] + "%"
+    : multi ? multi[1] + "×" + multi[2]
+    : percent ? percent[1] + "% de descuento" : "";
+  if (!discount) return "Ver promoción";
+  const range = label.match(/\b(\d{1,2})\s+(?:al|a)\s+(\d{1,2}\/\d{1,2})(?!\d)/i);
+  const dates = label.match(/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g) || [];
+  const weekday = label.match(/\b(?:lunes|martes|miércoles|jueves|viernes|sábado|domingo)(?:s)?\b/i);
+  const validity = Number.isFinite(expires) && expires > 0 ? "Hasta el " + promoDate.format(expires)
+    : range ? range[1] + "/" + range[2].split("/")[1] + " al " + range[2]
+    : dates.length >= 2 ? dates[0] + " al " + dates[1]
+    : dates.length === 1 ? (/\bhasta\b/i.test(label) ? "Hasta el " : "") + dates[0]
+    : weekday?.[0];
+  return validity ? discount + " · " + validity : discount;
+}
+
+function promoBadge(tag, label, expires) {
+  const badge = el("details", undefined, "promo");
+  badge.append(el("summary", shortPromo(label, expires)), el("div", label));
+  const summary = badge.firstElementChild;
+  summary.setAttribute("aria-label", summary.textContent + ". Ver condiciones");
+  const wrapper = el(tag);
+  wrapper.append(badge);
+  return wrapper;
+}
+
 function productKey(product) {
   return product.ean || (product.store + ":" + product.id);
 }
@@ -138,8 +171,8 @@ function renderResults() {
         const estimated = priceFor(offer, 1);
         line.append(el("span", offer.store, "offer-store"), el("strong", fmt(estimated.total), "offer-price"));
         if (estimated.total < offer.price) line.append(el("small", "Precio regular: " + fmt(offer.price)));
-        const promos = [...new Set(offer.promos.map((promo) => promo.label).filter(Boolean))];
-        if (promos.length) line.append(el("div", promos.join(" · "), "promo"));
+        const promos = new Map(offer.promos.filter((promo) => promo.label).map((promo) => [promo.label, promo]));
+        for (const promo of promos.values()) line.append(promoBadge("div", promo.label, promo.expires));
         const pair = priceFor(offer, 2);
         if (offer.promos.some((promo) => promo.estimated && promo.group === 2) && pair.total < estimated.total * 2) {
           line.append(el("div", "2 unidades por " + fmt(pair.total) + " · estimado", "promo"));
@@ -202,6 +235,7 @@ function renderPromotionCatalog(catalog) {
       const filterLabel = el("label", undefined, "promotion-filter");
       filterLabel.append(el("span", "Ver categoría de " + entry.store));
       const filter = el("select");
+      filter.dataset.store = entry.store;
       filter.setAttribute("aria-label", "Filtrar promociones de " + entry.store + " por categoría");
       const allOption = el("option", "Todas las categorías");
       allOption.value = "Todas";
@@ -215,6 +249,8 @@ function renderPromotionCatalog(catalog) {
       filter.addEventListener("change", () => {
         promotionCategoryFilters.set(entry.store, filter.value);
         renderPromotionCatalog(promotionCatalogEntries);
+        [...root.querySelectorAll(".promotion-filter select")]
+          .find((select) => select.dataset.store === entry.store)?.focus({preventScroll: true});
       });
       filterLabel.append(filter);
       section.append(filterLabel);
@@ -239,7 +275,7 @@ function renderPromotionCatalog(catalog) {
           card.append(el("h5", offer.name));
           card.append(el("strong", "Precio publicado: " + fmt(offer.price), "promotion-price"));
           const tags = el("ul", undefined, "promotion-tags");
-          for (const label of offer.promos) tags.append(el("li", label));
+          for (const label of offer.promos) tags.append(promoBadge("li", label));
           card.append(tags);
           const link = el("a", "Ver producto en la tienda");
           link.href = offer.link;
@@ -329,7 +365,8 @@ function renderBasket() {
   find(".basket-link").setAttribute("aria-label", "Tu compra: " + units + (units === 1 ? " unidad" : " unidades"));
   find("#basket-label").textContent = recommended ? "Costo final estimado" : "Subtotal de productos";
   find("#basket-caption").textContent = recommended ? "Con envío cotizado; sin cupones ni beneficios bancarios." :
-    basket.size ? "Antes de cotizar el envío." : "Agregá productos para cotizar tu lista.";
+    basket.size ? "Antes de cotizar el envío." : "Buscá un producto y tocá Agregar para armar tu lista.";
+  find(".planning").hidden = !basket.size;
   find("#quote").disabled = !basket.size || find("#quote").getAttribute("aria-busy") === "true";
   lists.replaceChildren();
   for (const [store, lines] of byStore) {
@@ -338,7 +375,7 @@ function renderBasket() {
     const heading = el("div", undefined, "store-heading");
     heading.append(el("h3", store));
     const storeTotal = el("div", undefined, "store-total");
-    storeTotal.append(el("span", "Subtotal de " + store), el("strong", fmt(lines.reduce((sum, line) => sum + line.total, 0))));
+    storeTotal.append(el("span", "Subtotal de productos"), el("strong", fmt(lines.reduce((sum, line) => sum + line.total, 0))));
     heading.append(storeTotal);
     section.append(heading);
     for (const line of lines) {
@@ -352,7 +389,7 @@ function renderBasket() {
       price.append(el("span", "Subtotal"), el("strong", fmt(line.total)));
       title.append(name, price);
       row.append(title);
-      if (line.promo) row.append(el("div", line.promo, "promo"));
+      if (line.promo) row.append(promoBadge("div", line.promo));
       const controls = el("div", undefined, "controls");
       const minus = button("−", () => changeQuantity(line.key, -1));
       minus.setAttribute("aria-label", "Quitar una unidad de " + line.product.name);
