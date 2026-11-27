@@ -400,3 +400,9 @@ main, #compra, #productos, #promos, #query { scroll-margin-top: 5.3rem; }
 @media (max-width: 22rem) {
   .promotion-list { grid-template-columns: minmax(0, 1fr); }
 }
+
+.basket-details { margin-top: .8rem; border-top: 1px solid var(--line); }
+.basket-details > summary { padding: .75rem .15rem; min-height: 2.75rem; font-weight: 650; }
+.basket-details .planning { margin-top: .2rem; }
+.basket-details .store:first-child { margin-top: 0; }
+.basket-details .quantity-label { min-width: 4rem; }

@@ -67,16 +67,20 @@
         <div class="basket-heading"><svg class="icon" aria-hidden="true"><use href="#i-basket"/></svg><h2 id="basket-title">Tu compra</h2></div>
         <div class="basket-summary"><span id="basket-label">Subtotal de productos</span><strong id="total">$0</strong></div>
         <p id="basket-caption" class="muted">Agregá productos para cotizar tu lista.</p>
-        <div id="lists"></div>
-        <div class="planning" hidden>
-          <h3>Entrega a domicilio</h3>
+        <details id="basket-items" class="basket-details" hidden>
+          <summary>Ver lista por supermercado</summary>
+          <div id="lists"></div>
+        </details>
+        <details id="basket-delivery" class="basket-details" hidden>
+          <summary>Calcular envío a Tandil</summary>
+          <div class="planning">
           <label>Fecha de compra <input id="purchase-date" type="date" aria-describedby="purchase-date-help"></label>
-          <p class="muted delivery-location">Entrega en Tandil</p>
           <p id="purchase-date-help" class="planning-help">Se usa para revisar qué promociones podrían estar vigentes ese día.</p>
           <button type="button" id="quote" disabled>Calcular costo con envío<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
         </div>
         <p id="quote-status" class="muted" role="status"></p>
         <div id="scenarios"></div>
+        </details>
       </aside>
     </div>
 

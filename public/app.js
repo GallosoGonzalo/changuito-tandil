@@ -171,11 +171,12 @@ function renderResults() {
         const estimated = priceFor(offer, 1);
         line.append(el("span", offer.store, "offer-store"), el("strong", fmt(estimated.total), "offer-price"));
         if (estimated.total < offer.price) line.append(el("small", "Precio regular: " + fmt(offer.price)));
-        const promos = new Map(offer.promos.filter((promo) => promo.label).map((promo) => [promo.label, promo]));
-        for (const promo of promos.values()) line.append(promoBadge("div", promo.label, promo.expires));
         const pair = priceFor(offer, 2);
-        if (offer.promos.some((promo) => promo.estimated && promo.group === 2) && pair.total < estimated.total * 2) {
+        if (pair.promo && pair.total < estimated.total * 2) {
+          line.append(promoBadge("div", pair.promo));
           line.append(el("div", "2 unidades por " + fmt(pair.total) + " · estimado", "promo"));
+        } else if (estimated.promo) {
+          line.append(promoBadge("div", estimated.promo));
         }
         prices.append(line);
       }
@@ -364,9 +365,13 @@ function renderBasket() {
   find("#nav-count").textContent = units;
   find(".basket-link").setAttribute("aria-label", "Tu compra: " + units + (units === 1 ? " unidad" : " unidades"));
   find("#basket-label").textContent = recommended ? "Costo final estimado" : "Subtotal de productos";
-  find("#basket-caption").textContent = recommended ? "Con envío cotizado; sin cupones ni beneficios bancarios." :
-    basket.size ? "Antes de cotizar el envío." : "Buscá un producto y tocá Agregar para armar tu lista.";
-  find(".planning").hidden = !basket.size;
+  find("#basket-caption").textContent = recommended ? units + (units === 1 ? " unidad" : " unidades") + " · Con envío estimado" :
+    basket.size ? units + (units === 1 ? " unidad" : " unidades") + " · Sin envío" : "Buscá un producto y tocá Agregar para armar tu lista.";
+  for (const id of ["#basket-items", "#basket-delivery"]) {
+    const details = find(id);
+    details.hidden = !basket.size;
+    if (!basket.size) details.open = false;
+  }
   find("#quote").disabled = !basket.size || find("#quote").getAttribute("aria-busy") === "true";
   lists.replaceChildren();
   for (const [store, lines] of byStore) {
@@ -375,7 +380,7 @@ function renderBasket() {
     const heading = el("div", undefined, "store-heading");
     heading.append(el("h3", store));
     const storeTotal = el("div", undefined, "store-total");
-    storeTotal.append(el("span", "Subtotal de productos"), el("strong", fmt(lines.reduce((sum, line) => sum + line.total, 0))));
+    storeTotal.append(el("strong", fmt(lines.reduce((sum, line) => sum + line.total, 0))));
     heading.append(storeTotal);
     section.append(heading);
     for (const line of lines) {
@@ -386,7 +391,7 @@ function renderBasket() {
       name.target = "_blank";
       name.rel = "noopener noreferrer";
       const price = el("div", undefined, "basket-item-subtotal");
-      price.append(el("span", "Subtotal"), el("strong", fmt(line.total)));
+      price.append(el("strong", fmt(line.total)));
       title.append(name, price);
       row.append(title);
       if (line.promo) row.append(promoBadge("div", line.promo));
@@ -400,7 +405,7 @@ function renderBasket() {
       }
       plus.disabled = basket.get(line.key).quantity >= 99;
       const quantity = basket.get(line.key).quantity;
-      controls.append(minus, el("span", "Cantidad: " + quantity + (quantity === 1 ? " unidad" : " unidades"), "quantity-label"), plus);
+      controls.append(minus, el("span", quantity + (quantity === 1 ? " unidad" : " unidades"), "quantity-label"), plus);
       row.append(controls);
       section.append(row);
     }
